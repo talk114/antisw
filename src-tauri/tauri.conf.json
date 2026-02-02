@@ -44,7 +44,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        ""
+        "https://github.com/talk114/antisw/releases/latest/download/updater.json"
       ],
       "dialog": true,
       "pubkey": "RWSQvAJOE+udAGSUoZB7Y7EhAGOyZkB1zHaKwRYfldgig5rIF+PVUDbo"
