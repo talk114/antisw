@@ -808,10 +808,10 @@ function Settings() {
                                         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-base-200 rounded-lg border border-gray-100 dark:border-base-300">
                                             <div>
                                                 <div className="font-medium text-gray-900 dark:text-base-content">
-                                                    {t('settings.advanced.debug_logs_title', '调试日志')}
+                                                    {t('settings.advanced.debug_logs_title', 'History')}
                                                 </div>
                                                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                                    {t('settings.advanced.debug_logs_enable_desc', '启用后会记录完整请求与响应链路，建议仅在排查问题时开启。')}
+                                                    {t('settings.advanced.debug_logs_enable_desc', 'Enable History')}
                                                 </p>
                                             </div>
                                             <label className="relative inline-flex items-center cursor-pointer">
@@ -837,12 +837,12 @@ function Settings() {
                                             <>
                                                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30 rounded-lg p-3">
                                                     <p className="text-sm text-amber-700 dark:text-amber-400">
-                                                        {t('settings.advanced.debug_logs_desc', '记录完整链路：原始输入、转换后的 v1internal 请求、以及上游响应。仅用于问题排查，可能包含敏感数据。')}
+                                                        {t('settings.advanced.debug_logs_desc', 'Record the complete chain: original input, the transformed v1internal request, and the upstream response. For troubleshooting purposes only; may contain sensitive data.')}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-900 dark:text-base-content mb-1">
-                                                        {t('settings.advanced.debug_log_dir', '调试日志输出目录')}
+                                                        {t('settings.advanced.debug_log_dir', 'History output directory')}
                                                     </label>
                                                     <div className="flex gap-2">
                                                         <input
@@ -871,7 +871,7 @@ function Settings() {
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                                                        {t('settings.advanced.debug_log_dir_hint', `不填写则使用默认目录：${dataDirPath.replace(/\/$/, '')}/debug_logs`)}
+                                                        {t('settings.advanced.debug_log_dir_hint', `If left blank, the default directory will be used: ${dataDirPath.replace(/\/$/, '')}/debug_logs`)}
                                                     </p>
                                                 </div>
                                             </>
