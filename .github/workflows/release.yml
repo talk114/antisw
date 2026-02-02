@@ -155,7 +155,7 @@ jobs:
 
   docker-build-amd64:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' && (github.repository == 'lbjlaq/Antigravity-Manager' || vars.ENABLE_DOCKER_PUSH == 'true')
+    if: github.event_name != 'pull_request' && (github.repository == 'talk114/antisw' || vars.ENABLE_DOCKER_PUSH == 'true')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -177,14 +177,14 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ github.repository_owner }}/antigravity-manager:latest-amd64
-            ${{ github.repository_owner }}/antigravity-manager:${{ github.ref_name }}-amd64
+            ${{ github.repository_owner }}/antisw:latest-amd64
+            ${{ github.repository_owner }}/antisw:${{ github.ref_name }}-amd64
           build-args: |
             USE_MIRROR=false
 
   docker-build-arm64:
     runs-on: ubuntu-24.04-arm
-    if: github.event_name != 'pull_request' && (github.repository == 'lbjlaq/Antigravity-Manager' || vars.ENABLE_DOCKER_PUSH == 'true')
+    if: github.event_name != 'pull_request' && (github.repository == 'talk114/antisw' || vars.ENABLE_DOCKER_PUSH == 'true')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -206,15 +206,15 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ github.repository_owner }}/antigravity-manager:latest-arm64
-            ${{ github.repository_owner }}/antigravity-manager:${{ github.ref_name }}-arm64
+            ${{ github.repository_owner }}/antisw:latest-arm64
+            ${{ github.repository_owner }}/antisw:${{ github.ref_name }}-arm64
           build-args: |
             USE_MIRROR=false
 
   docker-manifest:
     needs: [docker-build-amd64, docker-build-arm64]
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' && (github.repository == 'lbjlaq/Antigravity-Manager' || vars.ENABLE_DOCKER_PUSH == 'true')
+    if: github.event_name != 'pull_request' && (github.repository == 'talk114/antisw' || vars.ENABLE_DOCKER_PUSH == 'true')
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -224,10 +224,10 @@ jobs:
 
       - name: Create and push manifest
         run: |
-          docker buildx imagetools create -t ${{ github.repository_owner }}/antigravity-manager:latest \
-            ${{ github.repository_owner }}/antigravity-manager:latest-amd64 \
-            ${{ github.repository_owner }}/antigravity-manager:latest-arm64
+          docker buildx imagetools create -t ${{ github.repository_owner }}/antisw:latest \
+            ${{ github.repository_owner }}/antisw:latest-amd64 \
+            ${{ github.repository_owner }}/antisw:latest-arm64
 
-          docker buildx imagetools create -t ${{ github.repository_owner }}/antigravity-manager:${{ github.ref_name }} \
-            ${{ github.repository_owner }}/antigravity-manager:${{ github.ref_name }}-amd64 \
-            ${{ github.repository_owner }}/antigravity-manager:${{ github.ref_name }}-arm64
+          docker buildx imagetools create -t ${{ github.repository_owner }}/antisw:${{ github.ref_name }} \
+            ${{ github.repository_owner }}/antisw:${{ github.ref_name }}-amd64 \
+            ${{ github.repository_owner }}/antisw:${{ github.ref_name }}-arm64
