@@ -234,25 +234,25 @@ function Settings() {
         setIsCheckingUpdate(true);
         setUpdateInfo(null);
         try {
-            const result = await invoke<{
-                has_update: boolean;
-                latest_version: string;
-                current_version: string;
-                download_url: string;
-            }>('check_for_updates');
+            // const result = await invoke<{
+            //     has_update: boolean;
+            //     latest_version: string;
+            //     current_version: string;
+            //     download_url: string;
+            // }>('check_for_updates');
 
-            setUpdateInfo({
-                hasUpdate: result.has_update,
-                latestVersion: result.latest_version,
-                currentVersion: result.current_version,
-                downloadUrl: result.download_url,
-            });
+            // setUpdateInfo({
+            //     hasUpdate: result.has_update,
+            //     latestVersion: result.latest_version,
+            //     currentVersion: result.current_version,
+            //     downloadUrl: result.download_url,
+            // });
 
-            if (result.has_update) {
-                showToast(t('settings.about.new_version_available', { version: result.latest_version }), 'info');
-            } else {
-                showToast(t('settings.about.latest_version'), 'success');
-            }
+            // if (result.has_update) {
+            //     showToast(t('settings.about.new_version_available', { version: result.latest_version }), 'info');
+            // } else {
+            //     showToast(t('settings.about.latest_version'), 'success');
+            // }
         } catch (error) {
             showToast(`${t('settings.about.update_check_failed')}: ${error}`, 'error');
         } finally {
@@ -392,16 +392,8 @@ function Settings() {
                                         updateLanguage(newLang);
                                     }}
                                 >
-                                    <option value="zh">简体中文</option>
-                                    <option value="zh-TW">繁體中文</option>
-                                    <option value="en">English</option>
-                                    <option value="ja">日本語</option>
-                                    <option value="tr">Türkçe</option>
                                     <option value="vi">Tiếng Việt</option>
-                                    <option value="pt">Português</option>
-                                    <option value="ko">한국어</option>
-                                    <option value="ru">Русский</option>
-                                    <option value="ar">العربية</option>
+                                    <option value="en">English</option>
                                 </select>
                             </div>
 
@@ -983,7 +975,7 @@ function Settings() {
                                     </div>
 
                                     <div>
-                                        <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">Antigravity Tools</h3>
+                                        <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">Antigravity Switcher</h3>
                                         <div className="flex items-center justify-center gap-2 text-sm">
                                             <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium border border-blue-200 dark:border-blue-800">
                                                 v4.0.13
@@ -1020,7 +1012,7 @@ function Settings() {
 
                                     {/* GitHub Card */}
                                     <a
-                                        href="https://github.com/lbjlaq/Antigravity-Manager"
+                                        href="https://vnpay.vn"
                                         target="_blank"
                                         rel="noreferrer"
                                         className="bg-white dark:bg-base-100 p-4 rounded-2xl border border-gray-100 dark:border-base-300 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all group flex flex-col items-center text-center gap-3 cursor-pointer"

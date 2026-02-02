@@ -105,18 +105,8 @@ function Navbar() {
     }, []);
 
     const languages = [
-        { code: 'zh', label: '简体中文', short: 'ZH' },
-        { code: 'zh-TW', label: '繁體中文', short: 'TW' },
-        { code: 'en', label: 'English', short: 'EN' },
-        { code: 'ja', label: '日本語', short: 'JA' },
-        { code: 'tr', label: 'Türkçe', short: 'TR' },
         { code: 'vi', label: 'Tiếng Việt', short: 'VI' },
-        { code: 'pt', label: 'Português', short: 'PT' },
-        { code: 'ko', label: '한국어', short: 'KO' },
-        { code: 'ru', label: 'Русский', short: 'RU' },
-        { code: 'ar', label: 'العربية', short: 'AR' },
-        { code: 'es', label: 'Español', short: 'ES' },
-        { code: 'my', label: 'Bahasa Melayu', short: 'MY' },
+        { code: 'en', label: 'English', short: 'EN' }
     ];
 
     const handleLanguageChange = async (langCode: string) => {
@@ -151,7 +141,7 @@ function Navbar() {
                     <div className="flex items-center justify-start">
                         <Link to="/" className="text-xl font-semibold text-gray-900 dark:text-base-content flex items-center gap-2">
                             <img src={LogoIcon} alt="Logo" className="w-8 h-8" />
-                            <span>Antigravity Tools</span>
+                            <span>Antigravity Switcher</span>
                         </Link>
                     </div>
 
@@ -242,7 +232,7 @@ function Navbar() {
                     <div className="flex items-center">
                         <Link to="/" className="text-xl font-semibold text-gray-900 dark:text-base-content flex items-center gap-2">
                             <img src={LogoIcon} alt="Logo" className="w-8 h-8" />
-                            <span className="hidden md:inline">Antigravity Tools</span>
+                            <span className="hidden md:inline">Antigravity Switcher</span>
                         </Link>
                     </div>
 

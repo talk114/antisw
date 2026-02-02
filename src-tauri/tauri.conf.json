@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Antigravity Tools",
+  "productName": "Antigravity Switcher",
   "version": "4.0.13",
   "identifier": "com.lbjlaq.antigravity-tools",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "Antigravity Tools",
+        "title": "Antigravity Switcher",
         "width": 1024,
         "height": 700,
         "titleBarStyle": "Overlay",
@@ -44,7 +44,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/lbjlaq/Antigravity-Manager/releases/latest/download/updater.json"
+        ""
       ],
       "dialog": true,
       "pubkey": "RWSQvAJOE+udAGSUoZB7Y7EhAGOyZkB1zHaKwRYfldgig5rIF+PVUDbo"

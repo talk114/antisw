@@ -74,7 +74,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Antigravity Tools ${{ github.ref_name }}"
+          name: "Antigravity APP ${{ github.ref_name }}"
           body: "See the assets to download this version and install."
           draft: false
           prerelease: false
