@@ -53,7 +53,7 @@ jobs:
         run: npm run tauri build -- ${{ matrix.args }}
 
       # 1. 上传 updater.json 到 Artifacts (供后续合并使用)
-      - name: Upload updater json
+      - name: Upload updater jsonv2
         uses: actions/upload-artifact@v4
         with:
           name: updater-json-${{ matrix.platform }}-${{ strategy.job-index }}
