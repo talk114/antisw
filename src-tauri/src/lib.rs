@@ -318,6 +318,8 @@ pub fn run() {
             commands::complete_oauth_login,
             commands::cancel_oauth_login,
             commands::submit_oauth_code,
+            commands::prepare_vnpay_sso_listener,
+            commands::cancel_vnpay_sso_listener,
             commands::import_v1_accounts,
             commands::import_from_db,
             commands::import_custom_db,

@@ -432,6 +432,21 @@ pub async fn submit_oauth_code(code: String, state: Option<String>) -> Result<()
     modules::oauth_server::submit_oauth_code(code, state).await
 }
 
+/// Prepare VNPAY SSO listener and return the port
+#[tauri::command]
+pub async fn prepare_vnpay_sso_listener(app_handle: tauri::AppHandle) -> Result<u16, String> {
+    modules::logger::log_info("Preparing VNPAY SSO listener");
+    modules::oauth_server::prepare_vnpay_sso_listener(Some(app_handle)).await
+}
+
+/// Cancel VNPAY SSO listener
+#[tauri::command]
+pub async fn cancel_vnpay_sso_listener() -> Result<(), String> {
+    modules::logger::log_info("Cancelling VNPAY SSO listener");
+    modules::oauth_server::cancel_vnpay_sso_listener();
+    Ok(())
+}
+
 // --- 导入命令 ---
 
 #[tauri::command]

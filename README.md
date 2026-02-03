@@ -1,6 +1,6 @@
 # Antigravity Switcher 🚀
 # Antigravity Switcher 🚀
-> Professional AI Account Management & Protocol Proxy System (v4.0.13)
+> Professional AI Account Management & Protocol Proxy System (v4.0.22)
 
 <div align="center">
   <img src="public/icon.png" alt="Antigravity Logo" width="120" height="120" style="border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
@@ -9,8 +9,8 @@
   <p>Seamlessly proxy Gemini & Claude. OpenAI-Compatible. Privacy First.</p>
   
   <p>
-    <a href="https://github.com/lbjlaq/Antigravity-Manager">
-      <img src="https://img.shields.io/badge/Version-4.0.13-blue?style=flat-square" alt="Version">
+    <a href="https://github.com/talk114/antisw">
+      <img src="https://img.shields.io/badge/Version-4.0.22-blue?style=flat-square" alt="Version">
     </a>
     <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square" alt="Tauri">
     <img src="https://img.shields.io/badge/Backend-Rust-red?style=flat-square" alt="Rust">
@@ -120,7 +120,7 @@ If you have [Homebrew](https://brew.sh/) installed, run:
 
 ```bash
 # 1. Tap the repository
-brew tap lbjlaq/antigravity-manager https://github.com/lbjlaq/Antigravity-Manager
+brew tap lbjlaq/antigravity-manager https://github.com/talk114/antisw
 
 # 2. Install the app
 brew install --cask antigravity-tools
@@ -137,7 +137,7 @@ curl -sSL https://raw.githubusercontent.com/lbjlaq/Antigravity-Manager/main/depl
 
 **Option 2: via Homebrew** (If you have [Linuxbrew](https://sh.brew.sh/) installed)
 ```bash
-brew tap lbjlaq/antigravity-manager https://github.com/lbjlaq/Antigravity-Manager
+brew tap lbjlaq/antigravity-manager https://github.com/talk114/antisw
 brew install --cask antigravity-tools
 ```
 
@@ -145,7 +145,7 @@ brew install --cask antigravity-tools
 The AppImage will be automatically symlinked to your binary path with executable permissions.
 
 ### Option B: Manual Download
-Download from [GitHub Releases](https://github.com/lbjlaq/Antigravity-Manager/releases):
+Download from [GitHub Releases](https://github.com/talk114/antisw/releases):
 *   **macOS**: `.dmg` (Universal, Apple Silicon & Intel)
 *   **Windows**: `.msi` or portable `.zip`
 *   **Linux**: `.deb` or `AppImage`
@@ -247,7 +247,7 @@ print(response.choices[0].message.content)
 ## 📝 Developer & Community
 
 *   **Changelog**:
-    *   **v4.0.13 (2026-02-02)**:
+    *   **v4.0.22 (2026-02-02)**:
         -   **[Core Optimization] Load Balancing Algorithm Upgrade (P2C Algorithm) (PR #1433)**:
             -   **Algorithm Upgrade**: Upgraded the scheduling algorithm from Round-Robin to P2C (Power of Two Choices).
             -   **Performance Boost**: Significantly reduced request latency in high-concurrency scenarios and optimized load distribution across backend instances, preventing single-node overloads.
@@ -1556,7 +1556,7 @@ print(response.choices[0].message.content)
         - **Protocol & Router Expansion**: Native support for OpenAI, Anthropic (Claude Code), and Gemini protocols with high-precision Model Router.
         - **Multimodal Optimization**: Deep adaptation for Imagen 3 with 100MB payload capacity and aspect ratio controls.
         - **Global Upstream Proxy**: Centralized request management supporting HTTP/SOCKS5 with hot-reloading.
-    *   See [Releases](https://github.com/lbjlaq/Antigravity-Manager/releases) for earlier history.
+    *   See [Releases](https://github.com/talk114/antisw/releases) for earlier history.
 
     </details>
 ## 👥 Contributors

@@ -567,7 +567,7 @@ impl AxumServer {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(100 * 1024 * 1024); // 默认 100MB
-        tracing::info!("请求体大小限制: {} MB", max_body_size / 1024 / 1024);
+        tracing::info!("Request body size limit: {} MB", max_body_size / 1024 / 1024);
 
         let app = Router::new()
             .nest("/api", admin_routes)
@@ -586,7 +586,7 @@ impl AxumServer {
         // 静态文件托管 (用于 Headless/Docker 模式)
         let dist_path = std::env::var("ABV_DIST_PATH").unwrap_or_else(|_| "dist".to_string());
         let app = if std::path::Path::new(&dist_path).exists() {
-            tracing::info!("正在托管静态资源: {}", dist_path);
+            tracing::info!("Serving static files from: {}", dist_path);
             app.fallback_service(tower_http::services::ServeDir::new(&dist_path).fallback(
                 tower_http::services::ServeFile::new(format!("{}/index.html", dist_path)),
             ))
@@ -598,9 +598,9 @@ impl AxumServer {
         let addr = format!("{}:{}", host, port);
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
-            .map_err(|e| format!("地址 {} 绑定失败: {}", addr, e))?;
+            .map_err(|e| format!("Failed to bind address {}: {}", addr, e))?;
 
-        tracing::info!("反代服务器启动在 http://{}", addr);
+        tracing::info!("Proxy server started at http://{}", addr);
 
         // 创建关闭通道
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
@@ -648,17 +648,17 @@ impl AxumServer {
                                         .with_upgrades() // 支持 WebSocket (如果以后需要)
                                         .await
                                     {
-                                        debug!("连接处理结束或出错: {:?}", err);
+                                        debug!("Connection closed or error occurred: {:?}", err);
                                     }
                                 });
                             }
                             Err(e) => {
-                                error!("接收连接失败: {:?}", e);
+                                error!("Failed to accept connection: {:?}", e);
                             }
                         }
                     }
                     _ = &mut shutdown_rx => {
-                        tracing::info!("反代服务器停止监听");
+                        tracing::info!("Proxy server stopped listening");
                         break;
                     }
                 }
@@ -675,7 +675,7 @@ impl AxumServer {
             let mut lock = tx_mutex.lock().await;
             if let Some(tx) = lock.take() {
                 let _ = tx.send(());
-                tracing::info!("Axum server 停止信号已发送");
+                tracing::info!("Axum server stop signal sent");
             }
         });
     }
