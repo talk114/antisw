@@ -94,8 +94,15 @@ docker build --build-arg USE_MIRROR=true -t antigravity-manager:latest -f docker
 若要推送至你的倉庫：
 ```bash
 # 打上版本標籤並推送
+<<<<<<< HEAD
 docker tag antigravity-manager:latest talk114/antisw:latest
 docker tag antigravity-manager:latest talk114/antisw:4.1.1
 docker push talk114/antisw:latest
 docker push talk114/antisw:4.1.1
+=======
+docker tag antigravity-manager:latest lbjlaq/antigravity-manager:latest
+docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.2
+docker push lbjlaq/antigravity-manager:latest
+docker push lbjlaq/antigravity-manager:4.1.2
+>>>>>>> 93e481c5ca4b85c3f96bfc184d5fda0a8f8319f2
 ```

@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 cask "antigravity-sw" do
   version "4.1.1"
+=======
+cask "antigravity-tools" do
+  version "4.1.2"
+>>>>>>> 93e481c5ca4b85c3f96bfc184d5fda0a8f8319f2
   sha256 :no_check
 
   name "Antigravity Switcher"

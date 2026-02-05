@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Antigravity Tools",
-  "version": "4.1.1",
-  "identifier": "com.lbjlaq.antigravity-tools",
+  "productName": "AS",
+  "version": "4.1.2",
+  "identifier": "as.antigravity.switcher",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
