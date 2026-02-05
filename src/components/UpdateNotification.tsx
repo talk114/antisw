@@ -26,7 +26,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState>('checking');
-  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
     checkForUpdates();
@@ -178,19 +177,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               {updateState === 'available' && updateInfo && t('update_notification.message', { current: updateInfo.current_version })}
             </p>
           </div>
-
-          {updateState === 'downloading' && (
-            <div className="mb-4">
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1 text-center">{downloadProgress}%</p>
-            </div>
-          )}
-
+          
           {updateState === 'available' && (
             <div className="flex gap-2">
               <button
