@@ -28,60 +28,12 @@ i18n
             en: {
                 translation: en,
             },
-            zh: {
-                translation: zh,
-            },
-            "zh-TW": {
-                translation: zhTW,
-            },
-            ja: {
-                translation: ja,
-            },
-            tr: {
-                translation: tr,
-            },
-            // Handling 'zh-CN' as 'zh'
-            "zh-CN": {
-                translation: zh,
-            },
+           
             vi: {
                 translation: vi,
             },
             "vi-VN": {
                 translation: vi,
-            },
-            pt: {
-                translation: pt,
-            },
-            "pt-BR": {
-                translation: pt,
-            },
-            ru: {
-                translation: ru,
-            },
-            ko: {
-                translation: ko,
-            },
-            ar: {
-                translation: ar,
-            },
-            es: {
-                translation: es,
-            },
-            "es-ES": {
-                translation: es,
-            },
-            "es-MX": {
-                translation: es,
-            },
-            my: {
-                translation: my,
-            },
-            "ms": {
-                translation: my,
-            },
-            "ms-MY": {
-                translation: my,
             },
         },
         fallbackLng: "en",

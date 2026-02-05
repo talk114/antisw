@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
+import { Save, Github, User, MessageCircle, ExternalLink, RefreshCw, Heart, Coffee } from 'lucide-react';
 import { request as invoke } from '../utils/request';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useConfigStore } from '../stores/useConfigStore';
@@ -9,17 +9,19 @@ import { showToast } from '../components/common/ToastContainer';
 import QuotaProtection from '../components/settings/QuotaProtection';
 import SmartWarmup from '../components/settings/SmartWarmup';
 import PinnedQuotaModels from '../components/settings/PinnedQuotaModels';
+import ThinkingBudget from '../components/settings/ThinkingBudget';
 import { useDebugConsole } from '../stores/useDebugConsole';
 
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '../utils/env';
 import DebugConsole from '../components/debug/DebugConsole';
+import ProxyPoolSettings from '../components/settings/ProxyPoolSettings';
 
 
 function Settings() {
     const { t, i18n } = useTranslation();
     const { config, loadConfig, saveConfig, updateLanguage, updateTheme } = useConfigStore();
-    const { enable } = useDebugConsole();
+    const { enable, disable, isEnabled } = useDebugConsole();
     const [activeTab, setActiveTab] = useState<'general' | 'account' | 'proxy' | 'advanced' | 'debug' | 'about'>('general');
     const [formData, setFormData] = useState<AppConfig>({
         language: 'zh',
@@ -42,7 +44,14 @@ function Settings() {
             debug_logging: {
                 enabled: false,
                 output_dir: undefined
-            } as { enabled: boolean; output_dir?: string }
+            } as { enabled: boolean; output_dir?: string },
+            proxy_pool: {
+                enabled: false,
+                proxies: [],
+                health_check_interval: 300,
+                auto_failover: true,
+                strategy: 'priority'
+            }
         },
         scheduled_warmup: {
             enabled: false,
@@ -59,7 +68,8 @@ function Settings() {
         circuit_breaker: {
             enabled: false,
             backoff_steps: [30, 60, 120, 300, 600]
-        }
+        },
+
     });
 
     // Dialog state
@@ -79,6 +89,7 @@ function Settings() {
         latestVersion: string;
         currentVersion: string;
         downloadUrl: string;
+        source?: string;
     } | null>(null);
 
 
@@ -116,11 +127,7 @@ function Settings() {
         }
     }, [config]);
 
-    useEffect(() => {
-        if (activeTab === 'debug') {
-            enable();
-        }
-    }, [activeTab]);
+    // 删除自动启用调试控制台的逻辑 - 改为用户手动控制
 
     const handleSave = async () => {
         try {
@@ -848,6 +855,20 @@ function Settings() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Thinking Budget 设置 */}
+                                <div className="border-t border-gray-200 dark:border-base-200 pt-4">
+                                    <ThinkingBudget
+                                        config={formData.proxy?.thinking_budget || { mode: 'auto', custom_value: 24576 }}
+                                        onChange={(newConfig) => setFormData({
+                                            ...formData,
+                                            proxy: {
+                                                ...formData.proxy,
+                                                thinking_budget: newConfig,
+                                            },
+                                        })}
+                                    />
+                                </div>
                             </div>
                         </>
                     )}
@@ -855,81 +876,90 @@ function Settings() {
 
                     {/* 调试设置 */}
                     {activeTab === 'debug' && (
-                        <div className="space-y-4 animate-in fade-in duration-500 h-[calc(100vh-250px)] min-h-[500px]">
-                            <DebugConsole embedded />
+                        <div className="space-y-4 animate-in fade-in duration-500">
+                            {/* 标题和开关 */}
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-gray-900 dark:text-base-content">
+                                        {t('settings.debug.title', '调试控制台')}
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        {t('settings.debug.desc', '实时查看应用日志，用于调试和问题排查')}
+                                    </p>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={isEnabled}
+                                        onChange={(e) => e.target.checked ? enable() : disable()}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 dark:bg-base-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                                    <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {isEnabled ? t('settings.debug.enabled', '已启用') : t('settings.debug.disabled', '已禁用')}
+                                    </span>
+                                </label>
+                            </div>
+
+                            {/* 控制台或提示 */}
+                            {isEnabled ? (
+                                <div className="h-[calc(100vh-320px)] min-h-[400px]">
+                                    <DebugConsole embedded />
+                                </div>
+                            ) : (
+                                <div className="h-[calc(100vh-320px)] min-h-[400px] flex items-center justify-center bg-gray-50 dark:bg-base-200 rounded-xl border border-gray-200 dark:border-base-300">
+                                    <div className="text-center">
+                                        <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
+                                            {t('settings.debug.disabled_hint', '调试控制台已关闭')}
+                                        </p>
+                                        <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">
+                                            {t('settings.debug.disabled_desc', '开启后将实时记录应用日志')}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {/* 代理设置 */}
                     {activeTab === 'proxy' && (
-                        <div className="space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-base-content">{t('settings.proxy.title')}</h2>
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            <ProxyPoolSettings
+                                config={formData.proxy?.proxy_pool || {
+                                    enabled: false,
+                                    proxies: [],
+                                    health_check_interval: 300,
+                                    auto_failover: true,
+                                    strategy: 'priority'
+                                }}
+                                onChange={(newConfig, silent = false) => {
+                                    const updatedFormData = {
+                                        ...formData,
+                                        proxy: {
+                                            ...formData.proxy,
+                                            proxy_pool: newConfig
+                                        }
+                                    };
+                                    setFormData(updatedFormData);
 
-                            <div className="p-4 bg-gray-50 dark:bg-base-200 rounded-lg border border-gray-100 dark:border-base-300">
-                                <h3 className="text-md font-semibold text-gray-900 dark:text-base-content mb-3 flex items-center gap-2">
-                                    <Sparkles size={18} className="text-blue-500" />
-                                    {t('proxy.config.upstream_proxy.title')}
-                                </h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                    {t('proxy.config.upstream_proxy.desc')}
-                                </p>
+                                    // [FIX] Silent updates (like health polling) should NOT trigger saveConfig
+                                    // to prevent race conditions where old memory state rolls back new manual changes
+                                    if (silent) {
+                                        console.log('Proxy status sync (silent)');
+                                        return;
+                                    }
 
-                                <div className="space-y-4">
-                                    <div className="flex items-center">
-                                        <label className="flex items-center cursor-pointer gap-3">
-                                            <div className="relative">
-                                                <input
-                                                    type="checkbox"
-                                                    className="sr-only"
-                                                    checked={formData.proxy?.upstream_proxy?.enabled || false}
-                                                    onChange={(e) => setFormData({
-                                                        ...formData,
-                                                        proxy: {
-                                                            ...formData.proxy,
-                                                            upstream_proxy: {
-                                                                ...formData.proxy.upstream_proxy,
-                                                                enabled: e.target.checked
-                                                            }
-                                                        }
-                                                    })}
-                                                />
-                                                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.proxy?.upstream_proxy?.enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-base-300'}`}></div>
-                                                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.proxy?.upstream_proxy?.enabled ? 'transform translate-x-6' : ''}`}></div>
-                                            </div>
-                                            <span className="text-sm font-medium text-gray-900 dark:text-base-content">
-                                                {t('proxy.config.upstream_proxy.enable')}
-                                            </span>
-                                        </label>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            {t('proxy.config.upstream_proxy.url')}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.proxy?.upstream_proxy?.url || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                proxy: {
-                                                    ...formData.proxy,
-                                                    upstream_proxy: {
-                                                        ...formData.proxy.upstream_proxy,
-                                                        url: e.target.value
-                                                    }
-                                                }
-                                            })}
-                                            placeholder={t('proxy.config.upstream_proxy.url_placeholder')}
-                                            className="w-full px-4 py-4 border border-gray-200 dark:border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-base-content bg-gray-50 dark:bg-base-200"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                            {t('proxy.config.upstream_proxy.tip')}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+                                    // Hot reload: save immediately for manual changes
+                                    saveConfig({ ...updatedFormData, auto_refresh: true })
+                                        .then(() => {
+                                            console.log('Proxy config saved');
+                                        })
+                                        .catch(err => console.error('Save failed:', err));
+                                }}
+                            />
                         </div>
                     )}
+
                     {activeTab === 'about' && (
                         <div className="flex flex-col h-full animate-in fade-in duration-500">
                             <div className="flex-1 flex flex-col justify-center items-center space-y-8">
@@ -947,8 +977,9 @@ function Settings() {
                                     <div>
                                         <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">Antigravity Switcher</h3>
                                         <div className="flex items-center justify-center gap-2 text-sm">
+                                            v4.1.1
                                             <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium border border-blue-200 dark:border-blue-800">
-                                                v4.0.22
+                                                v4.1.1
                                             </span>
                                             <span className="text-gray-400 dark:text-gray-600">•</span>
                                             <span className="text-gray-500 dark:text-gray-400">{t('settings.branding.subtitle')}</span>

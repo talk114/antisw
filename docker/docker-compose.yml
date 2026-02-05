@@ -1,6 +1,6 @@
 services:
   antigravity-manager:
-    image: lbjlaq/antigravity-manager:latest
+    image: talk114/antisw:latest
     container_name: antigravity-manager
     ports:
       - "8045:8045"

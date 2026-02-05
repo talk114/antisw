@@ -21,6 +21,23 @@ export interface ProxyConfig {
     experimental?: ExperimentalConfig;
     user_agent_override?: string;
     saved_user_agent?: string;
+    thinking_budget?: ThinkingBudgetConfig;
+    proxy_pool?: ProxyPoolConfig;
+}
+
+// ============================================================================
+// Thinking Budget 配置 (控制 AI 深度思考时的 Token 预算)
+// ============================================================================
+
+/** Thinking Budget 处理模式 */
+export type ThinkingBudgetMode = 'auto' | 'passthrough' | 'custom';
+
+/** Thinking Budget 配置 */
+export interface ThinkingBudgetConfig {
+    /** 模式选择 */
+    mode: ThinkingBudgetMode;
+    /** 自定义固定值（仅在 mode=custom 时生效），范围 1024-65536 */
+    custom_value: number;
 }
 
 export interface DebugLoggingConfig {
@@ -128,4 +145,41 @@ export interface CloudflaredStatus {
     running: boolean;
     url?: string;
     error?: string;
+}
+
+// ============================================================================
+// 代理池类型定义
+// ============================================================================
+
+export interface ProxyAuth {
+    username: string;
+    password?: string;
+}
+
+export interface ProxyEntry {
+    id: string;
+    name: string;
+    url: string;
+    auth?: ProxyAuth;
+    enabled: boolean;
+    priority: number;
+    tags: string[];
+    max_accounts?: number;
+    health_check_url?: string;
+    last_check_time?: number;
+    is_healthy: boolean;
+    latency?: number; // [NEW] 延迟 (毫秒)
+}
+
+// export type ProxyPoolMode = 'global' | 'per_account' | 'hybrid'; // [REMOVED]
+
+export type ProxySelectionStrategy = 'round_robin' | 'random' | 'priority' | 'least_connections' | 'weighted_round_robin';
+
+export interface ProxyPoolConfig {
+    enabled: boolean;
+    // mode: ProxyPoolMode; // [REMOVED]
+    proxies: ProxyEntry[];
+    health_check_interval: number;
+    auto_failover: boolean;
+    strategy: ProxySelectionStrategy;
 }

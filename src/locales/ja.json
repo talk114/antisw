@@ -37,6 +37,12 @@
         "environment_error": "環境エラー: {{error}}",
         "load_more": "もっと読み込む",
         "submit": "送信",
+        "update": "更新",
+        "load_failed": "読み込み失敗",
+        "create_success": "作成成功",
+        "update_success": "更新成功",
+        "delete_success": "削除成功",
+        "copied": "クリップボードにコピーしました",
         "retry": "再試行",
         "back": "戻る"
     },
@@ -47,6 +53,7 @@
         "token_stats": "統計",
         "call_records": "トラフィックログ",
         "security": "IP管理",
+        "security_logs": "IPログ",
         "settings": "設定",
         "theme_to_dark": "ダークモードに切り替え",
         "theme_to_light": "ライトモードに切り替え",
@@ -297,6 +304,7 @@
             "account": "アカウント",
             "proxy": "プロキシ設定",
             "advanced": "詳細設定",
+            "debug": "デバッグ",
             "about": "情報"
         },
         "general": {
@@ -333,7 +341,60 @@
             "desc": "アカウントリストに表示するモデル配額を選択します。選択していないモデルは詳細ポップアップでのみ表示されます"
         },
         "proxy": {
-            "title": "プロキシ設定"
+            "title": "APIプロキシサービス"
+        },
+        "proxy_pool": {
+            "title": "プロキシプール",
+            "strategy_priority": "優先度順",
+            "strategy_round_robin": "ラウンドロビン",
+            "strategy_random": "ランダム",
+            "strategy_least_connections": "最小接続数",
+            "test_all": "すべてテスト",
+            "batch_import": "インポート",
+            "binding_manager": "バインディング",
+            "add_proxy": "プロキシを追加",
+            "edit_proxy": "プロキシを編集",
+            "name": "名前",
+            "url": "プロキシURL",
+            "username": "ユーザー名",
+            "password": "パスワード",
+            "max_accounts": "最大アカウント数",
+            "max_accounts_hint": "0 = 無制限",
+            "priority": "優先度",
+            "priority_hint": "小さいほど優先",
+            "health_check_url": "ヘルスチェックURL",
+            "tags": "タグ",
+            "add_tag_placeholder": "タグを追加...",
+            "seconds": "秒",
+            "test_completed": "ヘルスチェック完了",
+            "test_failed": "ヘルスチェック失敗",
+            "confirm_delete": "このプロキシを削除してもよろしいですか？",
+            "empty": "プロキシがありません",
+            "column_priority": "優先度",
+            "column_status": "ステータス",
+            "column_details": "プロキシ詳細",
+            "column_bindings": "バインディング",
+            "import_title": "プロキシの一括インポート",
+            "import_label": "プロキシリストを貼り付け（1行に1つ）",
+            "import_hint": "対応形式: protocol://user:pass@host:port, host:port:user:pass",
+            "import_preview": "プレビュー",
+            "import_confirm": "{{count}} 個のプロキシをインポート",
+            "no_valid_proxies": "有効なプロキシが見つかりません",
+            "binding": {
+                "title": "アカウントプロキシバインディング",
+                "load_failed": "バインディングの読み込みに失敗しました",
+                "unbind_success": "バインド解除しました",
+                "bind_success": "バインドしました",
+                "update_failed": "バインディングの更新に失敗しました",
+                "assigned_proxy": "割り当て済みプロキシ",
+                "default_strategy": "デフォルト（戦略に従う）"
+            },
+            "status": {
+                "inactive": "非アクティブ",
+                "checking": "確認中",
+                "healthy": "正常",
+                "timeout": "タイムアウト"
+            }
         },
         "advanced": {
             "title": "詳細設定",
@@ -384,6 +445,18 @@
             "http_api_settings_saved": "HTTP API設定を保存しました。適用するには再起動が必要です",
             "http_api_title": "HTTP APIサービス"
         },
+        "debug": {
+            "title": "デバッグコンソール",
+            "desc": "デバッグやトラブルシューティング用のリアルタイムアプリログを表示",
+            "enabled": "有効",
+            "disabled": "無効",
+            "disabled_hint": "デバッグコンソールはオフです",
+            "disabled_desc": "有効にするとアプリログのリアルタイム記録を開始します",
+            "console_title": "デバッグコンソール",
+            "console_desc": "問題のトラブルシューティング用にリアルタイムアプリログを表示します。",
+            "enable_desc": "有効にするとバックエンドログをキャプチャして表示します。",
+            "open_btn": "コンソールを開く"
+        },
         "about": {
             "title": "情報",
             "version": "アプリバージョン",
@@ -405,6 +478,25 @@
             "support_alipay": "Alipay",
             "support_wechat": "WeChat Pay",
             "support_buymeacoffee": "コーヒーを奢る"
+        },
+        "thinking_budget": {
+            "title": "思考予算 (Thinking Budget)",
+            "description": "AI の思考 Token 予算を制御します。一部のモデル（Flash、-thinking サフィックスなど）は、アップストリームにより 24576 の上限があります。",
+            "mode_label": "処理モード",
+            "mode": {
+                "auto": "自動制限",
+                "auto_desc": "スマート制限",
+                "passthrough": "パススルー",
+                "passthrough_desc": "制限なし",
+                "custom": "カスタム",
+                "custom_desc": "固定値"
+            },
+            "auto_hint": "自動モード: Flash モデル、-thinking サフィックスモデル、および Web Search が有効なリクエストに対して、API エラーを避けるため自動的に 24576 に制限します。その他のモデルは元のリクエスト値を保持します。",
+            "passthrough_warning": "パススルーモード: 呼び出し元の thinking_budget 値を直接使用し、制限を一切行いません。アップストリーム API が高い値をサポートしていない場合、リクエストが失敗する可能性があります。",
+            "custom_value_label": "カスタム値",
+            "custom_value_hint": "範囲: 1024 - 65536。推奨値: 24576 (Flash 上限) または 51200 (標準の拡張思考)。",
+            "high_value_warning": "現在の値が 24576 を超えています。一部のモデル（Flash、-thinking）ではサポートされず、リクエストが失敗する可能性があります。",
+            "tokens": "tokens"
         },
         "quota_protection": {
             "auto_restore_info": "クォータがリセットされると、アカウントは自動的に再度有効になります",
@@ -455,10 +547,10 @@
         "config": {
             "title": "サービス構成",
             "request": {
-                "user_agent": "User-Agent Override",
-                "user_agent_tooltip": "Override the User-Agent header sent to upstream APIs. Leave empty to use default.",
-                "user_agent_hint": "Current Default: antigravity/<version> <os>/<arch>",
-                "user_agent_placeholder": "Enter custom User-Agent string..."
+                "user_agent": "User-Agent オーバーライド",
+                "user_agent_tooltip": "アップストリームAPIに送信するUser-Agentヘッダーを上書きします。空欄の場合はデフォルトを使用します。",
+                "user_agent_hint": "現在のデフォルト: antigravity/<version> <os>/<arch>",
+                "user_agent_placeholder": "カスタムUser-Agent文字列を入力..."
             },
             "port": "リスニングポート",
             "port_tooltip": "ローカルAPIプロキシがリッスンするTCPポート。変更するにはサービスを停止し、再起動して適用してください。",
@@ -746,6 +838,31 @@
             "current_model": "現在のモデル",
             "apply_presets": "プリセットを適用",
             "presets_applied": "プリセットを正常に適用しました",
+            "preset_default": "デフォルト",
+            "preset_default_desc": "GPT-4 → Gemini Pro, Claude → Opus",
+            "preset_performance": "性能優先",
+            "preset_performance_desc": "すべてに高性能モデルを使用",
+            "preset_cost": "コスト最適化",
+            "preset_cost_desc": "経済的なモデルを優先",
+            "preset_balanced": "バランス",
+            "preset_balanced_desc": "性能とコストのバランス",
+            "built_in_presets": "組み込みプリセット",
+            "custom_presets": "カスタムプリセット",
+            "apply_selected": "選択したものを適用",
+            "add_preset": "現在のマッピングを保存",
+            "delete_preset": "現在のプリセットを削除",
+            "cannot_delete_builtin": "組み込みプリセットは削除できません",
+            "no_mapping_to_save": "保存するマッピング設定がありません",
+            "preset_name_required": "プリセット名が必要です",
+            "preset_saved": "プリセットが正常に保存されました",
+            "manage_presets_title": "カスタムプリセットの管理",
+            "save_current_as_preset": "現在の設定を保存",
+            "preset_name_placeholder": "プリセット名を入力...",
+            "save_hint": "現在アクティブなモデルマッピングを再利用可能なプリセットとして保存します。",
+            "your_presets": "あなたのプリセット",
+            "no_custom_presets": "カスタムプリセットはまだありません",
+            "mappings_count": "個のマッピング",
+            "custom_preset_desc": "ユーザー定義プリセット",
             "custom_mappings": "カスタムマッピング",
             "group_title": "シリーズグループ",
             "gemini3_group_label": "Gemini 3 (推奨)",
@@ -934,7 +1051,14 @@
     "update_notification": {
         "title": "新しいバージョンが利用可能です",
         "message": "最適化と改善が含まれた新しいバージョンの準備ができました。現在のバージョン: v{{current}}",
-        "action": "今すぐ更新"
+        "ready": "更新の準備ができました",
+        "downloading": "更新をダウンロード中...",
+        "restarting": "アプリを再起動中...",
+        "auto_update": "自動更新",
+        "toast": {
+            "not_ready": "自動更新パッケージの準備ができていません。ダウンロードページにリダイレクトします...",
+            "failed": "自動更新に失敗しました。ダウンロードページにリダイレクトします..."
+        }
     },
     "login": {
         "title": "セキュアアクセス制御",
@@ -1003,6 +1127,7 @@
         },
         "logs": {
             "search_placeholder": "IP、パス、UAで検索...",
+            "username": "ユーザー",
             "show_blocked_only": "ブロックのみ表示",
             "status": "ステータス",
             "ip_address": "IPアドレス",
@@ -1065,5 +1190,48 @@
             "save_success": "設定を保存しました",
             "save_error": "設定の保存に失敗しました"
         }
+    },
+    "errors": {
+        "stream": {
+            "timeout_error": "リクエストがタイムアウトしました。ネットワーク接続を確認してください",
+            "connection_error": "接続に失敗しました。ネットワークまたはプロキシ設定を確認してください",
+            "decode_error": "ネットワークが不安定なため、データ転送が中断されました。1) ネットワークを確認 2) プロキシを切り替え 3) 再試行 してください",
+            "stream_error": "ストリーム転送エラーが発生しました。後でもう一度お試しください",
+            "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください"
+        }
+    },
+    "user_token": {
+        "title": "ユーザー Token 管理",
+        "total_users": "総ユーザー数",
+        "active_tokens": "アクティブな Token",
+        "total_created": "累計作成数",
+        "create": "Token を作成",
+        "username": "ユーザー名",
+        "token": "Token",
+        "expires": "有効期限",
+        "usage": "使用量",
+        "ip_limit": "IP 制限",
+        "created": "作成日時",
+        "today_requests": "本日のリクエスト数",
+        "never": "期限なし",
+        "renew": "更新",
+        "renew_button": "更新",
+        "unlimited": "制限なし",
+        "create_title": "新しい Token の作成",
+        "description": "説明",
+        "curfew": "夜間制限 (サービス停止時間帯)",
+        "edit_title": "Token の編集",
+        "username_required": "ユーザー名は必須です",
+        "renew_success": "更新に成功しました",
+        "expires_day": "1 日",
+        "expires_week": "1 週間",
+        "expires_month": "1 ヶ月",
+        "expires_never": "期限なし",
+        "no_data": "データがありません",
+        "placeholder_username": "例: user1",
+        "placeholder_desc": "備考 (任意)",
+        "placeholder_max_ips": "0 = 無制限",
+        "hint_max_ips": "0 は制限なしを意味します",
+        "hint_curfew": "空欄で無効。サーバー時間に基づきます。"
     }
 }
