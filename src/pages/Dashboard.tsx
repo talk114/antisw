@@ -32,6 +32,39 @@ function Dashboard() {
         fetchCurrentAccount();
     }, []);
 
+    // Listen for VNPAY SSO events
+    useEffect(() => {
+        if (!isTauri()) return;
+
+        const setupListeners = async () => {
+            const { listen } = await import('@tauri-apps/api/event');
+            
+            const unlistenAccounts = await listen('vnpay-sso-accounts-received', (event: any) => {
+                const accounts = event.payload as Array<{ email: string; refresh_token: string }>;
+                console.log('[Dashboard] Received VNPAY SSO accounts:', accounts.length);
+                showToast(`Received ${accounts.length} VNPAY account(s)`, 'info');
+            });
+
+            const unlistenCompleted = await listen('vnpay-sso-import-completed', () => {
+                console.log('[Dashboard] VNPAY SSO import completed');
+                showToast('VNPAY accounts imported successfully', 'success');
+                // Refresh account list
+                fetchAccounts();
+                fetchCurrentAccount();
+            });
+
+            return () => {
+                unlistenAccounts();
+                unlistenCompleted();
+            };
+        };
+
+        const cleanup = setupListeners();
+        return () => {
+            cleanup.then(fn => fn && fn());
+        };
+    }, [fetchAccounts, fetchCurrentAccount]);
+
     // 计算统计数据
     const stats = useMemo(() => {
         const geminiQuotas = accounts
@@ -122,7 +155,7 @@ function Dashboard() {
             // Get export data from API (contains refresh_token)
             const accountIds = accountsToExport.map(acc => acc.id);
             const response = await exportAccounts(accountIds);
-            
+
             if (!response.accounts || response.accounts.length === 0) {
                 showToast(t('dashboard.toast.export_no_accounts'), 'warning');
                 return;
@@ -188,14 +221,45 @@ function Dashboard() {
                         </h1>
                     </div>
                     <div className="flex gap-2">
+                        <button
+                            className="px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 shadow-sm"
+                            onClick={async () => {
+                                try {
+                                    // Prepare VNPAY SSO listener and get dynamic port
+                                    const port = await invoke<number>('prepare_vnpay_sso_listener');
+                                    
+                                    const callbackUrl = `http://localhost:${port}/sso-callback`;
+                                    const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?urlcallback=${encodeURIComponent(callbackUrl)}`;
+                                    
+                                    // Open in default browser using opener plugin
+                                    if (isTauri()) {
+                                        const { openUrl } = await import('@tauri-apps/plugin-opener');
+                                        await openUrl(vnpayAuthUrl);
+                                    } else {
+                                        window.open(vnpayAuthUrl, '_blank');
+                                    }
+                                } catch (error) {
+                                    console.error('Failed to prepare SSO VNPAY:', error);
+                                    showToast(`SSO VNPAY error: ${error}`, 'error');
+                                }
+                            }}
+                        >
+                            <Users className="w-3.5 h-3.5" />
+                            SSO VNPAY
+                        </button>
+
                         <AddAccountDialog onAdd={handleAddAccount} />
+
+                    
+                        
                         <button
                             className={`px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5 shadow-sm ${isRefreshing || !currentAccount ? 'opacity-70 cursor-not-allowed' : ''}`}
                             onClick={handleRefreshCurrent}
                             disabled={isRefreshing || !currentAccount}
+                            title={isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            {isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}
+                            <span className="hidden sm:inline">{isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}</span>
                         </button>
                     </div>
                 </div>

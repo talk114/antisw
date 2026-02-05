@@ -3,7 +3,7 @@
 # 关闭已集成到 v4.0.3 的 PR 脚本
 # 使用前请确保已安装并登录 GitHub CLI: brew install gh && gh auth login
 
-REPO="lbjlaq/Antigravity-Manager"
+REPO="talk114/antisw"
 VERSION="v4.0.3"
 
 # 感谢消息模板

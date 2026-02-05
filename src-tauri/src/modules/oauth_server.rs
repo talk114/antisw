@@ -5,6 +5,7 @@ use tokio::sync::watch;
 use std::sync::{Mutex, OnceLock};
 use tauri::Url;
 use crate::modules::oauth;
+use serde::{Deserialize, Serialize};
 
 struct OAuthFlowState {
     auth_url: String,
@@ -16,10 +17,28 @@ struct OAuthFlowState {
     code_rx: Option<mpsc::Receiver<Result<String, String>>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VnpayAccount {
+    pub email: String,
+    pub refresh_token: String,
+}
+
+struct VnpaySsoState {
+    port: u16,
+    cancel_tx: watch::Sender<bool>,
+    #[allow(dead_code)]
+    accounts_tx: mpsc::Sender<Vec<VnpayAccount>>,
+}
+
 static OAUTH_FLOW_STATE: OnceLock<Mutex<Option<OAuthFlowState>>> = OnceLock::new();
+static VNPAY_SSO_STATE: OnceLock<Mutex<Option<VnpaySsoState>>> = OnceLock::new();
 
 fn get_oauth_flow_state() -> &'static Mutex<Option<OAuthFlowState>> {
     OAUTH_FLOW_STATE.get_or_init(|| Mutex::new(None))
+}
+
+fn get_vnpay_sso_state() -> &'static Mutex<Option<VnpaySsoState>> {
+    VNPAY_SSO_STATE.get_or_init(|| Mutex::new(None))
 }
 
 fn oauth_success_html() -> &'static str {
@@ -486,4 +505,254 @@ pub fn prepare_oauth_flow_manually(redirect_uri: String, state_str: String) -> R
     }
 
     Ok((auth_url, code_rx))
+}
+
+/// Prepare VNPAY SSO listener
+/// Returns the port number to construct callback URL: http://localhost:{port}/sso-callback
+pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) -> Result<u16, String> {
+    // Cancel existing listener if any
+    if let Ok(mut state) = get_vnpay_sso_state().lock() {
+        if let Some(s) = state.take() {
+            let _ = s.cancel_tx.send(true);
+        }
+    }
+
+    // Create ephemeral listener
+    let mut ipv4_listener: Option<TcpListener> = None;
+    let mut ipv6_listener: Option<TcpListener> = None;
+
+    let port: u16;
+    match TcpListener::bind("[::1]:0").await {
+        Ok(l6) => {
+            port = l6
+                .local_addr()
+                .map_err(|e| format!("failed_to_get_local_port: {}", e))?
+                .port();
+            ipv6_listener = Some(l6);
+
+            match TcpListener::bind(format!("127.0.0.1:{}", port)).await {
+                Ok(l4) => ipv4_listener = Some(l4),
+                Err(e) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "failed_to_bind_ipv4_sso_port_127_0_0_1:{} (will only listen on IPv6): {}",
+                        port, e
+                    ));
+                }
+            }
+        }
+        Err(_) => {
+            let l4 = TcpListener::bind("127.0.0.1:0")
+                .await
+                .map_err(|e| format!("failed_to_bind_local_port: {}", e))?;
+            port = l4
+                .local_addr()
+                .map_err(|e| format!("failed_to_get_local_port: {}", e))?
+                .port();
+            ipv4_listener = Some(l4);
+
+            match TcpListener::bind(format!("[::1]:{}", port)).await {
+                Ok(l6) => ipv6_listener = Some(l6),
+                Err(e) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "failed_to_bind_ipv6_sso_port_::1:{} (will only listen on IPv4): {}",
+                        port, e
+                    ));
+                }
+            }
+        }
+    }
+
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let (accounts_tx, mut accounts_rx) = mpsc::channel::<Vec<VnpayAccount>>(1);
+
+    // Start listeners for /sso-callback endpoint
+    let app_handle_for_tasks = app_handle.clone();
+
+    if let Some(l4) = ipv4_listener {
+        let tx = accounts_tx.clone();
+        let mut rx = cancel_rx.clone();
+        let app_handle = app_handle_for_tasks.clone();
+        
+        tokio::spawn(async move {
+            loop {
+                let accept_result = tokio::select! {
+                    res = l4.accept() => res,
+                    _ = rx.changed() => break,
+                };
+
+                if let Ok((mut stream, _)) = accept_result {
+                    let mut buffer = [0u8; 8192];
+                    let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    
+                    crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv4): {} bytes", bytes_read));
+
+                    // Check if this is /sso-callback
+                    if request.contains("/sso-callback") {
+                        // Extract JSON body from POST request
+                        let body = request
+                            .split("\r\n\r\n")
+                            .nth(1)
+                            .unwrap_or("");
+
+                        crate::modules::logger::log_info(&format!("VNPAY SSO body: {}", body));
+
+                        match serde_json::from_str::<Vec<VnpayAccount>>(body) {
+                            Ok(accounts) => {
+                                crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
+                                
+                                // Send success response
+                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: green;'>✅ VNPAY SSO Successful!</h1>\
+                                    <p>Received {} account(s). You can close this window.</p>\
+                                    <script>setTimeout(function() { window.close(); }, 2000);</script>\
+                                    </body></html>";
+                                let response = response.replace("{}", &accounts.len().to_string());
+                                let _ = stream.write_all(response.as_bytes()).await;
+                                let _ = stream.flush().await;
+
+                                // Emit event to frontend with accounts
+                                if let Some(h) = &app_handle {
+                                    use tauri::Emitter;
+                                    let _ = h.emit("vnpay-sso-accounts-received", accounts.clone());
+                                }
+
+                                // Send to channel
+                                let _ = tx.send(accounts).await;
+                                break; // Stop listener after successful callback
+                            },
+                            Err(e) => {
+                                crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
+                                let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: red;'>❌ Invalid Data Format</h1>\
+                                    <p>Failed to parse account data.</p>\
+                                    </body></html>";
+                                let _ = stream.write_all(response.as_bytes()).await;
+                                let _ = stream.flush().await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    if let Some(l6) = ipv6_listener {
+        let tx = accounts_tx.clone();
+        let mut rx = cancel_rx.clone();
+        let app_handle = app_handle_for_tasks;
+        
+        tokio::spawn(async move {
+            loop {
+                let accept_result = tokio::select! {
+                    res = l6.accept() => res,
+                    _ = rx.changed() => break,
+                };
+
+                if let Ok((mut stream, _)) = accept_result {
+                    let mut buffer = [0u8; 8192];
+                    let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    
+                    crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv6): {} bytes", bytes_read));
+
+                    if request.contains("/sso-callback") {
+                        let body = request
+                            .split("\r\n\r\n")
+                            .nth(1)
+                            .unwrap_or("");
+
+                        crate::modules::logger::log_info(&format!("VNPAY SSO body: {}", body));
+
+                        match serde_json::from_str::<Vec<VnpayAccount>>(body) {
+                            Ok(accounts) => {
+                                crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
+                                
+                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: green;'>✅ VNPAY SSO Successful!</h1>\
+                                    <p>Received {} account(s). You can close this window.</p>\
+                                    <script>setTimeout(function() { window.close(); }, 2000);</script>\
+                                    </body></html>";
+                                let response = response.replace("{}", &accounts.len().to_string());
+                                let _ = stream.write_all(response.as_bytes()).await;
+                                let _ = stream.flush().await;
+
+                                if let Some(h) = &app_handle {
+                                    use tauri::Emitter;
+                                    let _ = h.emit("vnpay-sso-accounts-received", accounts.clone());
+                                }
+
+                                let _ = tx.send(accounts).await;
+                                break;
+                            },
+                            Err(e) => {
+                                crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
+                                let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: red;'>❌ Invalid Data Format</h1>\
+                                    <p>Failed to parse account data.</p>\
+                                    </body></html>";
+                                let _ = stream.write_all(response.as_bytes()).await;
+                                let _ = stream.flush().await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Spawn a task to handle received accounts and save them
+    if let Some(h) = app_handle {
+        tokio::spawn(async move {
+            if let Some(accounts) = accounts_rx.recv().await {
+                crate::modules::logger::log_info(&format!("Processing {} VNPAY accounts for storage", accounts.len()));
+                
+                // Import accounts using AccountService
+                let service = crate::modules::account_service::AccountService::new(
+                    crate::modules::integration::SystemManager::Desktop(h.clone())
+                );
+                
+                for account_data in accounts {
+                    match service.add_account(&account_data.refresh_token).await {
+                        Ok(account) => {
+                            crate::modules::logger::log_info(&format!("Successfully added VNPAY account: {}", account.email));
+                        },
+                        Err(e) => {
+                            crate::modules::logger::log_error(&format!("Failed to add VNPAY account {}: {}", account_data.email, e));
+                        }
+                    }
+                }
+                
+                // Emit completion event
+                use tauri::Emitter;
+                let _ = h.emit("vnpay-sso-import-completed", ());
+            }
+        });
+    }
+
+    // Save state
+    if let Ok(mut state) = get_vnpay_sso_state().lock() {
+        *state = Some(VnpaySsoState {
+            port,
+            cancel_tx,
+            accounts_tx,
+        });
+    }
+
+    crate::modules::logger::log_info(&format!("VNPAY SSO listener started on port {}", port));
+    Ok(port)
+}
+
+/// Cancel VNPAY SSO listener
+pub fn cancel_vnpay_sso_listener() {
+    if let Ok(mut state) = get_vnpay_sso_state().lock() {
+        if let Some(s) = state.take() {
+            let _ = s.cancel_tx.send(true);
+            crate::modules::logger::log_info("Cancelled VNPAY SSO listener");
+        }
+    }
 }

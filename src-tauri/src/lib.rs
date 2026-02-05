@@ -65,7 +65,11 @@ pub fn run() {
     if let Err(e) = modules::security_db::init_db() {
         error!("Failed to initialize security database: {}", e);
     }
-
+    
+    // Initialize user token database
+    if let Err(e) = modules::user_token_db::init_db() {
+        error!("Failed to initialize user token database: {}", e);
+    }
 
     if is_headless {
         info!("Starting in HEADLESS mode...");
@@ -76,9 +80,27 @@ pub fn run() {
             let proxy_state = commands::proxy::ProxyServiceState::new();
             let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
 
+            // [FIX] Initialize log bridge for headless mode
+            // Pass a dummy app handle or None since we don't have a Tauri app handle in headless mode
+            // Actually log_bridge relies on AppHandle to emit events.
+            // In headless mode, we don't emit events, but we still need the buffer.
+            // We need to modify log_bridge to handle missing AppHandle gracefully, which it already does (Option).
+            // But init_log_bridge requires AppHandle.
+            // We'll skip passing AppHandle for now and just leverage the global buffer capability.
+            // Since init_log_bridge takes AppHandle, we might need a separate init for headless or just not call init and rely on lazy init of buffer?
+            // Checking log_bridge code again...
+            // "static LOG_BUFFER: OnceLock<...> = OnceLock::new();" -> lazy init.
+            // So we just need to ensure the tracing layer is added.
+            // And `logger::init_logger()` adds the layer?
+            // Let's check `modules::logger`.
+
+            let proxy_state = commands::proxy::ProxyServiceState::new();
+            let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
+
             // Load config
             match modules::config::load_app_config() {
                 Ok(mut config) => {
+                    let mut modified = false;
                     // Force LAN access in headless/docker mode so it binds to 0.0.0.0
                     config.proxy.allow_lan_access = true;
 
@@ -92,6 +114,7 @@ pub fn run() {
                         if !key.trim().is_empty() {
                             info!("Using API Key from environment variable");
                             config.proxy.api_key = key;
+                            modified = true;
                         }
                     }
 
@@ -105,6 +128,7 @@ pub fn run() {
                         if !pwd.trim().is_empty() {
                             info!("Using Web UI Password from environment variable");
                             config.proxy.admin_password = Some(pwd);
+                            modified = true;
                         }
                     }
 
@@ -128,6 +152,7 @@ pub fn run() {
                         if let Some(m) = mode {
                             info!("Using Auth Mode from environment variable: {:?}", m);
                             config.proxy.auth_mode = m;
+                            modified = true;
                         }
                     }
 
@@ -143,6 +168,15 @@ pub fn run() {
                     info!("💡 Tips: You can use these keys to login to Web UI and access AI APIs.");
                     info!("💡 Search docker logs or grep gui_config.json to find them.");
                     info!("--------------------------------------------------");
+
+                    // [FIX #1460] Persist environment overrides to ensure they are visible in Web UI/load_config
+                    if modified {
+                        if let Err(e) = modules::config::save_app_config(&config) {
+                            error!("Failed to persist environment overrides: {}", e);
+                        } else {
+                            info!("Environment overrides persisted to gui_config.json");
+                        }
+                    }
 
                     // Start proxy service
                     if let Err(e) = commands::proxy::internal_start_proxy_service(
@@ -318,6 +352,8 @@ pub fn run() {
             commands::complete_oauth_login,
             commands::cancel_oauth_login,
             commands::submit_oauth_code,
+            commands::prepare_vnpay_sso_listener,
+            commands::cancel_vnpay_sso_listener,
             commands::import_v1_accounts,
             commands::import_from_db,
             commands::import_custom_db,
@@ -357,6 +393,8 @@ pub fn run() {
             commands::proxy::generate_api_key,
             commands::proxy::reload_proxy_accounts,
             commands::proxy::update_model_mapping,
+            commands::proxy::check_proxy_health,
+            commands::proxy::get_proxy_pool_config,
             commands::proxy::fetch_zai_models,
             commands::proxy::get_proxy_scheduling_config,
             commands::proxy::update_proxy_scheduling_config,
@@ -365,6 +403,12 @@ pub fn run() {
             commands::proxy::get_preferred_account,
             commands::proxy::clear_proxy_rate_limit,
             commands::proxy::clear_all_proxy_rate_limits,
+            commands::proxy::check_proxy_health,
+            // Proxy Pool Binding commands
+            commands::proxy_pool::bind_account_proxy,
+            commands::proxy_pool::unbind_account_proxy,
+            commands::proxy_pool::get_account_proxy_binding,
+            commands::proxy_pool::get_all_account_bindings,
             // Autostart commands
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,
@@ -418,6 +462,14 @@ pub fn run() {
             modules::log_bridge::is_debug_console_enabled,
             modules::log_bridge::get_debug_console_logs,
             modules::log_bridge::clear_debug_console_logs,
+            // User Token commands
+            commands::user_token::list_user_tokens,
+            commands::user_token::create_user_token,
+            commands::user_token::update_user_token,
+            commands::user_token::delete_user_token,
+            commands::user_token::renew_user_token,
+            commands::user_token::get_token_ip_bindings,
+            commands::user_token::get_user_token_summary,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

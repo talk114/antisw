@@ -14,14 +14,8 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest"
-            args: "--target x86_64-apple-darwin"
-          - platform: "macos-latest"
             args: "--target universal-apple-darwin"
           - platform: "ubuntu-22.04"
-            args: ""
-          - platform: "ubuntu-24.04-arm"
             args: ""
           - platform: "windows-latest"
             args: ""
@@ -59,7 +53,7 @@ jobs:
         run: npm run tauri build -- ${{ matrix.args }}
 
       # 1. 上传 updater.json 到 Artifacts (供后续合并使用)
-      - name: Upload updater json
+      - name: Upload updater jsonv2
         uses: actions/upload-artifact@v4
         with:
           name: updater-json-${{ matrix.platform }}-${{ strategy.job-index }}
@@ -111,7 +105,7 @@ jobs:
           # Extract the section, remove leading 4 spaces dedent
           awk -v ver="$VERSION" '
             BEGIN { capture=0 }
-            # Match start line: "    *   **v4.0.13..."
+            # Match start line: "    *   **v4.0.22..."
             $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*" ver { capture=1; next }
             # Match next version line to stop: "    *   **v..."
             capture && $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*v" { capture=0; exit }
@@ -152,5 +146,4 @@ jobs:
           body_path: release_notes.md
           files: updater.json
           # 确保不覆盖已存在的其他 assets (softprops/action-gh-release 默认是追加)
-
 

@@ -1,5 +1,5 @@
 # Antigravity Switcher 🚀
-> 专业的 AI 账号管理与协议反代系统 (v4.0.13)
+> 专业的 AI 账号管理与协议反代系统 (v4.0.22)
 <div align="center">
   <img src="public/icon.png" alt="Antigravity Logo" width="120" height="120" style="border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
 
@@ -7,8 +7,8 @@
   <p>不仅仅是账号管理，更是打破 API 调用壁垒的终极解决方案。</p>
   
   <p>
-    <a href="https://github.com/lbjlaq/Antigravity-Manager">
-      <img src="https://img.shields.io/badge/Version-4.0.13-blue?style=flat-square" alt="Version">
+    <a href="https://github.com/talk114/antisw">
+      <img src="https://img.shields.io/badge/Version-4.0.22-blue?style=flat-square" alt="Version">
     </a>
     <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square" alt="Tauri">
     <img src="https://img.shields.io/badge/Backend-Rust-red?style=flat-square" alt="Rust">
@@ -117,7 +117,7 @@ graph TD
 
 ```bash
 # 1. 订阅本仓库的 Tap
-brew tap lbjlaq/antigravity-manager https://github.com/lbjlaq/Antigravity-Manager
+brew tap talk114/antisw https://github.com/talk114/antisw
 
 # 2. 安装应用
 brew install --cask antigravity-tools
@@ -129,12 +129,12 @@ brew install --cask antigravity-tools
 
 **方式 1：一键安装脚本 (推荐)**
 ```bash
-curl -sSL https://raw.githubusercontent.com/lbjlaq/Antigravity-Manager/main/deploy/arch/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/talk114/antisw/main/deploy/arch/install.sh | bash
 ```
 
 **方式 2：通过 Homebrew** (如果您已安装 [Linuxbrew](https://sh.brew.sh/))
 ```bash
-brew tap lbjlaq/antigravity-manager https://github.com/lbjlaq/Antigravity-Manager
+brew tap talk114/antisw https://github.com/talk114/antisw
 brew install --cask antigravity-tools
 ```
 
@@ -142,7 +142,7 @@ brew install --cask antigravity-tools
 安装后会自动将 AppImage 添加到二进制路径并配置可执行权限。
 
 ### 选项 B: 手动下载
-前往 [GitHub Releases](https://github.com/lbjlaq/Antigravity-Manager/releases) 下载对应系统的包：
+前往 [GitHub Releases](https://github.com/talk114/antisw/releases) 下载对应系统的包：
 *   **macOS**: `.dmg` (支持 Apple Silicon & Intel)
 *   **Windows**: `.msi` 或 便携版 `.zip`
 *   **Linux**: `.deb` 或 `AppImage`
@@ -160,7 +160,7 @@ docker run -d --name antigravity-manager \
   -e WEB_PASSWORD=your-login-password \
   -e ABV_MAX_BODY_SIZE=104857600 \
   -v ~/.antigravity_tools:/root/.antigravity_tools \
-  lbjlaq/antigravity-manager:latest
+  talk114/antisw:latest
 
 # 忘记密钥？执行 docker logs antigravity-manager 或 grep -E '"api_key"|"admin_password"' ~/.antigravity_tools/gui_config.json
 
@@ -358,7 +358,7 @@ response = client.chat.completions.create(
 ## 📝 开发者与社区
 
 *   **版本演进 (Changelog)**:
-    *   **v4.0.13 (2026-02-02)**:
+    *   **v4.0.22 (2026-02-02)**:
         -   **[核心优化] 负载均衡算法升级 (P2C Algorithm) (PR #1433)**:
             -   **算法升级**: 将原有的 Round-Robin (轮询) 算法升级为 P2C (Power of Two Choices) 负载均衡算法。
             -   **性能提升**: 在高并发场景下显著减少了请求等待时间，并优化了后端实例的负载分布，避免了单点过载。
@@ -1586,7 +1586,7 @@ response = client.chat.completions.create(
                 - 添加信号量控制,限制最大并发数为 5,避免 API 限流和数据库写入冲突
                 - 10 个账号刷新耗时从 ~30s 降低至 ~6s (提升约 5 倍)
                 - 添加性能监控日志,实时显示刷新耗时
-                - 感谢 [@Mag1cFall](https://github.com/Mag1cFall) 提供的优化方案 ([#354](https://github.com/lbjlaq/Antigravity-Manager/pull/354))
+                - 感谢 [@Mag1cFall](https://github.com/Mag1cFall) 提供的优化方案 ([#354](https://github.com/talk114/antisw/pull/354))
         - **UI 视觉设计优化 (核心致谢 @Mag1cFall PR #353 + @AmbitionsXXXV PR #371)**:
             - **API 代理页面视觉改进**:
                 - **柔化禁用状态遮罩**: 将禁用卡片的遮罩从 `bg-white/60` 改为 `bg-gray-100/40`,移除模糊效果,提升可读性。

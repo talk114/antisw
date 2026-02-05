@@ -11,6 +11,10 @@ pub mod autostart;
 pub mod cloudflared;
 // 导出 security 命令 (IP 监控)
 pub mod security;
+// 导出 proxy_pool 命令
+pub mod proxy_pool;
+// 导出 user_token 命令
+pub mod user_token;
 
 /// 列出所有账号
 #[tauri::command]
@@ -357,6 +361,10 @@ pub async fn save_config(
         instance.axum_server.update_debug_logging(&config.proxy).await;
         // [NEW] 更新 User-Agent 配置
         instance.axum_server.update_user_agent(&config.proxy).await;
+        // 更新 Thinking Budget 配置
+        crate::proxy::update_thinking_budget_config(config.proxy.thinking_budget.clone());
+        // 更新代理池配置
+        instance.axum_server.update_proxy_pool(config.proxy.proxy_pool.clone()).await;
         // 更新熔断配置
         instance.token_manager.update_circuit_breaker_config(config.circuit_breaker.clone()).await;
         tracing::debug!("已同步热更新反代服务配置");
@@ -430,6 +438,21 @@ pub async fn cancel_oauth_login() -> Result<(), String> {
 pub async fn submit_oauth_code(code: String, state: Option<String>) -> Result<(), String> {
     modules::logger::log_info("收到手动提交 OAuth Code 请求");
     modules::oauth_server::submit_oauth_code(code, state).await
+}
+
+/// Prepare VNPAY SSO listener and return the port
+#[tauri::command]
+pub async fn prepare_vnpay_sso_listener(app_handle: tauri::AppHandle) -> Result<u16, String> {
+    modules::logger::log_info("Preparing VNPAY SSO listener");
+    modules::oauth_server::prepare_vnpay_sso_listener(Some(app_handle)).await
+}
+
+/// Cancel VNPAY SSO listener
+#[tauri::command]
+pub async fn cancel_vnpay_sso_listener() -> Result<(), String> {
+    modules::logger::log_info("Cancelling VNPAY SSO listener");
+    modules::oauth_server::cancel_vnpay_sso_listener();
+    Ok(())
 }
 
 // --- 导入命令 ---
@@ -755,8 +778,32 @@ pub async fn toggle_proxy_status(
         if enable { "已启用" } else { "已禁用" }
     ));
 
-    // 4. 如果反代服务正在运行,重新加载账号池
-    let _ = crate::commands::proxy::reload_proxy_accounts(proxy_state).await;
+    // 4. 如果反代服务正在运行,立刻同步到内存池（避免禁用后仍被选中）
+    {
+        let instance_lock = proxy_state.instance.read().await;
+        if let Some(instance) = instance_lock.as_ref() {
+            // 如果禁用的是当前固定账号，则自动关闭固定模式（内存 + 配置持久化）
+            if !enable {
+                let pref_id = instance.token_manager.get_preferred_account().await;
+                if pref_id.as_deref() == Some(&account_id) {
+                    instance.token_manager.set_preferred_account(None).await;
+
+                    if let Ok(mut cfg) = crate::modules::config::load_app_config() {
+                        if cfg.proxy.preferred_account_id.as_deref() == Some(&account_id) {
+                            cfg.proxy.preferred_account_id = None;
+                            let _ = crate::modules::config::save_app_config(&cfg);
+                        }
+                    }
+                }
+            }
+
+            instance
+                .token_manager
+                .reload_account(&account_id)
+                .await
+                .map_err(|e| format!("同步账号失败: {}", e))?;
+        }
+    }
 
     // 5. 更新托盘菜单
     crate::modules::tray::update_tray_menus(&app);
