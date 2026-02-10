@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, ExternalLink, RefreshCw } from 'lucide-react';
+import { Save, User, ExternalLink, RefreshCw, LayoutDashboard, Users, Network, Activity, BarChart3, Settings as SettingsIcon, CheckCircle2, Globe, Lock } from 'lucide-react';
 import { request as invoke } from '../utils/request';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useConfigStore } from '../stores/useConfigStore';
@@ -1133,7 +1133,7 @@ function Settings() {
                                     <div>
                                         <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">{t('common.app_name', 'AntiSwitcher')}</h3>
                                         <div className="flex items-center justify-center gap-2 text-sm">
-                                            v4.1.2
+                                            v4.1.11
                                             <span className="text-gray-400 dark:text-gray-600">•</span>
                                             <span className="text-gray-500 dark:text-gray-400">{t('settings.branding.subtitle')}</span>
                                         </div>

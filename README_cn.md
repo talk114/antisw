@@ -120,7 +120,7 @@ graph TD
 brew tap talk114/antisw https://github.com/talk114/antisw
 
 # 2. 安装应用
-brew install --cask antigravity-tools
+brew install --cask antigravity-sw
 ```
 > **提示**: 如果遇到权限问题，建议添加 `--no-quarantine` 参数。
 
@@ -135,7 +135,7 @@ curl -sSL https://raw.githubusercontent.com/talk114/antisw/main/deploy/arch/inst
 **方式 2：通过 Homebrew** (如果您已安装 [Linuxbrew](https://sh.brew.sh/))
 ```bash
 brew tap talk114/antisw https://github.com/talk114/antisw
-brew install --cask antigravity-tools
+brew install --cask antigravity-sw
 ```
 
 #### 其他 Linux 发行版
