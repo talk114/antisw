@@ -322,7 +322,10 @@
             "auto_check_update_disabled": "已禁用自动检查更新",
             "update_check_interval": "检查间隔(小时)",
             "update_check_interval_desc": "设置自动检查更新的时间间隔(1-168 小时)",
-            "update_check_interval_saved": "已保存检查间隔设置"
+            "update_check_interval_saved": "已保存检查间隔设置",
+            "menu_display_title": "菜单显示设置",
+            "menu_display_desc": "选择要在菜单栏中显示的功能项。隐藏不常用的菜单可以节省空间。",
+            "menu_display_hint": "被选中的项目将显示在顶部菜单栏中"
         },
         "account": {
             "title": "账号设置",
@@ -1076,7 +1079,10 @@
         "toast": {
             "not_ready": "自动更新包尚未就绪，为您跳转到下载页面...",
             "failed": "自动更新失败，为您跳转到下载页面..."
-        }
+        },
+        "force_update_title": "必须更新",
+        "force_update_message": "您的版本 ({{current}}) 低于最低要求版本 ({{min}})。请立即更新以继续使用。",
+        "force_update_button": "立即更新"
     },
     "login": {
         "title": "安全访问控制",

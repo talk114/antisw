@@ -325,7 +325,10 @@
             "auto_check_update_disabled": "Auto check disabled",
             "update_check_interval": "Check Interval (hours)",
             "update_check_interval_desc": "Set auto-check interval (1-168 hours)",
-            "update_check_interval_saved": "Check interval settings saved"
+            "update_check_interval_saved": "Check interval settings saved",
+            "menu_display_title": "Menu Display Settings",
+            "menu_display_desc": "Select which features to display in the menu bar. Hide infrequently used menus to save space.",
+            "menu_display_hint": "Selected items will be displayed in the top menu bar"
         },
         "account": {
             "title": "Account Settings",
@@ -1111,9 +1114,12 @@
         "restarting": "Restarting application...",
         "auto_update": "Download Update",
         "toast": {
-            "not_ready": "Auto-update package is not ready, redirecting to download page...",
+            "not_ready": "Auto-update package not ready yet, redirecting to download page...",
             "failed": "Auto-update failed, redirecting to download page..."
-        }
+        },
+        "force_update_title": "Update Required",
+        "force_update_message": "Your version ({{current}}) is below the minimum required version ({{min}}). Please update immediately to continue using the app.",
+        "force_update_button": "Update Now"
     },
     "login": {
         "title": "Secure Access Control",

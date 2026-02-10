@@ -317,7 +317,10 @@
             "auto_check_update_disabled": "Đã tắt tự động kiểm tra",
             "update_check_interval": "Chu kỳ kiểm tra (giờ)",
             "update_check_interval_desc": "Đặt khoảng thời gian tự động kiểm tra (1-168 giờ)",
-            "update_check_interval_saved": "Đã lưu cài đặt chu kỳ kiểm tra"
+            "update_check_interval_saved": "Đã lưu cài đặt chu kỳ kiểm tra",
+            "menu_display_title": "Cài đặt Hiển thị Menu",
+            "menu_display_desc": "Chọn các mục chức năng hiển thị trong thanh menu. Ẩn các menu ít dùng để tiết kiệm không gian.",
+            "menu_display_hint": "Các mục được chọn sẽ hiển thị trong thanh menu phía trên"
         },
         "account": {
             "title": "Cài đặt Tài khoản",
@@ -1009,9 +1012,12 @@
         "restarting": "Đang khởi động lại ứng dụng...",
         "auto_update": "Cập nhật tự động",
         "toast": {
-            "not_ready": "Gói cập nhật tự động chưa sẵn sàng, đang chuyển hướng bạn đến trang tải xuống...",
-            "failed": "Cập nhật tự động thất bại, đang chuyển hướng bạn đến trang tải xuống..."
-        }
+            "not_ready": "Gói cập nhật tự động chưa sẵn sàng, đang chuyển đến trang tải xuống...",
+            "failed": "Cập nhật tự động thất bại, đang chuyển đến trang tải xuống..."
+        },
+        "force_update_title": "Cần Cập Nhật Ngay",
+        "force_update_message": "Phiên bản của bạn ({{current}}) thấp hơn phiên bản tối thiểu yêu cầu ({{min}}). Vui lòng cập nhật ngay để tiếp tục sử dụng.",
+        "force_update_button": "Cập Nhật Ngay"
     },
     "login": {
         "title": "Kiểm soát truy cập an toàn",

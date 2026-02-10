@@ -489,9 +489,9 @@ function Settings() {
 
                                 {/* 菜单显示设置 */}
                                 <div className="border-t border-gray-200 dark:border-base-200 pt-6 mt-6">
-                                    <h3 className="font-medium text-gray-900 dark:text-base-content mb-3">菜单显示设置</h3>
+                                    <h3 className="font-medium text-gray-900 dark:text-base-content mb-3">{t('settings.general.menu_display_title')}</h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                        选择要在菜单栏中显示的功能项。隐藏不常用的菜单可以节省空间。
+                                        {t('settings.general.menu_display_desc')}
                                     </p>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                         {[
@@ -578,7 +578,7 @@ function Settings() {
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-                                        被选中的项目将显示在顶部菜单栏中
+                                        {t('settings.general.menu_display_hint')}
                                     </p>
                                 </div>
                             </>

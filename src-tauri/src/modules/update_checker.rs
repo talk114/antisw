@@ -3,20 +3,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::modules::logger;
 use chrono::Utc;
 
-const GITHUB_API_URL: &str = "https://api.github.com/repos/talk114/antisw/releases/latest";
-const GITHUB_RAW_URL: &str = "https://raw.githubusercontent.com/talk114/antisw/main/package.json";
-const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net/gh/talk114/antisw@main/package.json";
+const VERSION_SERVER_URL: &str = "http://gravityland.vnoffice.io.vn/app.version";
+const DOWNLOAD_URL: &str = "https://gravityland.vnoffice.io.vn";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum VersionStatus {
+    BelowMinimum,
+    UpdateAvailable,
+    UpToDate,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateInfo {
     pub current_version: String,
     pub latest_version: String,
+    pub min_version: String,
     pub has_update: bool,
-    pub download_url: String, // previously release_url
-    pub release_notes: String,
-    pub published_at: String,
+    pub download_url: String,
+    pub version_status: VersionStatus,
     #[serde(default)]
     pub source: Option<String>,
 }
@@ -44,39 +51,69 @@ impl Default for UpdateSettings {
 }
 
 #[derive(Debug, Deserialize)]
-struct GitHubRelease {
-    tag_name: String,
-    html_url: String,
-    body: String,
-    published_at: String,
+struct ServerVersionInfo {
+    min: String,
+    latest: String,
 }
 
-/// Check for updates with fallback strategy
+/// Check for updates from custom server endpoint
 pub async fn check_for_updates() -> Result<UpdateInfo, String> {
-    // 1. Try GitHub API (Preferred: has release notes, specific version mapping)
-    match check_github_api().await {
-        Ok(info) => return Ok(info),
-        Err(e) => {
-            logger::log_warn(&format!("GitHub API check failed: {}. Trying fallbacks...", e));
-        }
+    let client = create_client().await?;
+
+    logger::log_info("Checking for updates from custom server...");
+
+    let response = client
+        .get(VERSION_SERVER_URL)
+        .send()
+        .await
+        .map_err(|e| format!("Request to version server failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Version server returned status: {}", response.status()));
     }
 
-    // 2. Try GitHub Raw (Precision: avoids CDN caching issues)
-    match check_static_url(GITHUB_RAW_URL, "GitHub Raw").await {
-        Ok(info) => return Ok(info),
-        Err(e) => {
-            logger::log_warn(&format!("GitHub Raw check failed: {}. Trying next fallback...", e));
-        }
-    }
+    let server_info: ServerVersionInfo = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse version info: {}", e))?;
 
-    // 3. Try jsDelivr (High Availability: CDN)
-    match check_static_url(JSDELIVR_URL, "jsDelivr").await {
-        Ok(info) => return Ok(info),
-        Err(e) => {
-            logger::log_error(&format!("All update checks failed. Last error: {}", e));
-            return Err(e);
-        }
-    }
+    let current_version = CURRENT_VERSION.to_string();
+    let min_version = server_info.min;
+    let latest_version = server_info.latest;
+
+    // Determine version status
+    let (version_status, has_update) = if compare_versions(&min_version, &current_version) {
+        // current < min: Force update required
+        logger::log_warn(&format!(
+            "Current version {} is below minimum required version {}",
+            current_version, min_version
+        ));
+        (VersionStatus::BelowMinimum, true)
+    } else if compare_versions(&latest_version, &current_version) {
+        // min <= current < latest: Update available
+        logger::log_info(&format!(
+            "Update available: {} (Current: {})",
+            latest_version, current_version
+        ));
+        (VersionStatus::UpdateAvailable, true)
+    } else {
+        // current >= latest: Up to date
+        logger::log_info(&format!(
+            "Up to date: {} (Latest: {})",
+            current_version, latest_version
+        ));
+        (VersionStatus::UpToDate, false)
+    };
+
+    Ok(UpdateInfo {
+        current_version,
+        latest_version,
+        min_version,
+        has_update,
+        download_url: DOWNLOAD_URL.to_string(),
+        version_status,
+        source: Some("Custom Server".to_string()),
+    })
 }
 
 async fn create_client() -> Result<reqwest::Client, String> {
@@ -102,96 +139,7 @@ async fn create_client() -> Result<reqwest::Client, String> {
     builder.build().map_err(|e| format!("Failed to create HTTP client: {}", e))
 }
 
-async fn check_github_api() -> Result<UpdateInfo, String> {
-    let client = create_client().await?;
 
-    logger::log_info("Checking for updates via GitHub API...");
-
-    let response = client
-        .get(GITHUB_API_URL)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("GitHub API returned status: {}", response.status()));
-    }
-
-    let release: GitHubRelease = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse release info: {}", e))?;
-
-    let latest_version = release.tag_name.trim_start_matches('v').to_string();
-    let current_version = CURRENT_VERSION.to_string();
-    let has_update = compare_versions(&latest_version, &current_version);
-
-    if has_update {
-        logger::log_info(&format!("New version found (API): {} (Current: {})", latest_version, current_version));
-    } else {
-        logger::log_info(&format!("Up to date (API): {} (Matches {})", current_version, latest_version));
-    }
-
-    Ok(UpdateInfo {
-        current_version,
-        latest_version,
-        has_update,
-        download_url: release.html_url,
-        release_notes: release.body,
-        published_at: release.published_at,
-        source: Some("GitHub API".to_string()),
-    })
-}
-
-#[derive(Deserialize)]
-struct PackageJson {
-    version: String,
-}
-
-async fn check_static_url(url: &str, source_name: &str) -> Result<UpdateInfo, String> {
-    let client = create_client().await?;
-
-    logger::log_info(&format!("Checking for updates via {}...", source_name));
-
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("{} returned status: {}", source_name, response.status()));
-    }
-
-    let package_json: PackageJson = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse package.json: {}", e))?;
-
-    let latest_version = package_json.version;
-    let current_version = CURRENT_VERSION.to_string();
-    let has_update = compare_versions(&latest_version, &current_version);
-
-    if has_update {
-        logger::log_info(&format!("New version found ({}): {} (Current: {})", source_name, latest_version, current_version));
-    } else {
-        logger::log_info(&format!("Up to date ({}): {} (Matches {})", source_name, current_version, latest_version));
-    }
-
-    // fallback sources generally don't provide release notes or download specific URL, construct generic
-    let download_url = "https://github.com/talk114/antisw/releases/latest".to_string();
-    let release_notes = format!("New version detected via {}. Please check release page for details.", source_name);
-
-    Ok(UpdateInfo {
-        current_version,
-        latest_version,
-        has_update,
-        download_url,
-        release_notes,
-        published_at: Utc::now().to_rfc3339(), // Approximate time
-        source: Some(source_name.to_string()),
-    })
-}
 
 /// Compare two semantic versions (e.g., "3.3.30" vs "3.3.29")
 fn compare_versions(latest: &str, current: &str) -> bool {
@@ -284,11 +232,36 @@ mod tests {
 
     #[test]
     fn test_compare_versions() {
+        // Test that newer version is detected
         assert!(compare_versions("3.3.36", "3.3.35"));
         assert!(compare_versions("3.4.0", "3.3.35"));
         assert!(compare_versions("4.0.3", "3.3.35"));
+        
+        // Test that older or equal versions are not detected as updates
         assert!(!compare_versions("3.3.34", "3.3.35"));
         assert!(!compare_versions("3.3.35", "3.3.35"));
+    }
+
+    #[test]
+    fn test_version_status_logic() {
+        // Simulate version comparisons
+        let current = "4.1.5";
+        let min = "4.1.2";
+        let latest = "4.1.12";
+
+        // Test: current >= min (should not be BelowMinimum)
+        assert!(!compare_versions(min, current));
+        
+        // Test: current < latest (should be UpdateAvailable)
+        assert!(compare_versions(latest, current));
+
+        // Test: current < min (should be BelowMinimum)
+        let current_old = "4.1.1";
+        assert!(compare_versions(min, current_old));
+
+        // Test: current >= latest (should be UpToDate)
+        let current_new = "4.1.12";
+        assert!(!compare_versions(latest, current_new));
     }
 
     #[test]

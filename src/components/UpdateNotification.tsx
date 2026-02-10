@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Download, Sparkles, ArrowRight, Loader2, CheckCircle } from 'lucide-react';
+import { X, Download, Sparkles, ArrowRight, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { request as invoke } from '../utils/request';
 import { useTranslation } from 'react-i18next';
 import { check as tauriCheck } from '@tauri-apps/plugin-updater';
@@ -10,11 +10,13 @@ interface UpdateInfo {
   has_update: boolean;
   latest_version: string;
   current_version: string;
+  min_version: string;
   download_url: string;
+  version_status: 'BelowMinimum' | 'UpdateAvailable' | 'UpToDate';
   source?: string;
 }
 
-type UpdateState = 'checking' | 'available' | 'downloading' | 'ready' | 'none';
+type UpdateState = 'checking' | 'available' | 'downloading' | 'ready' | 'none' | 'force';
 
 interface UpdateNotificationProps {
   onClose: () => void;
@@ -35,11 +37,19 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
     try {
       const info = await invoke<UpdateInfo>('check_for_updates');
       console.log('Update info:', info);
-      if (info.has_update) {
+
+      if (info.version_status === 'BelowMinimum') {
+        // Force update required
+        setUpdateInfo(info);
+        setUpdateState('force');
+        setTimeout(() => setIsVisible(true), 100);
+      } else if (info.version_status === 'UpdateAvailable') {
+        // Optional update available
         setUpdateInfo(info);
         setUpdateState('available');
         setTimeout(() => setIsVisible(true), 100);
       } else {
+        // Up to date
         onClose();
       }
     } catch (error) {
@@ -57,13 +67,13 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
     try {
       const update = await tauriCheck();
       if (update) {
-       var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
-   if (isTauri()) {
-                                        const { openUrl } = await import('@tauri-apps/plugin-opener');
-                                        await openUrl(vnpayAuthUrl);
-                                    } else {
-                                        window.open(vnpayAuthUrl, '_blank');
-                                    }
+        var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
+        if (isTauri()) {
+          const { openUrl } = await import('@tauri-apps/plugin-opener');
+          await openUrl(vnpayAuthUrl);
+        } else {
+          window.open(vnpayAuthUrl, '_blank');
+        }
       } else {
         // Native updater found no update (e.g. draft release or updater.json not ready)
         // Fallback to manual download
@@ -81,18 +91,22 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   };
 
   const handleManualDownload = async () => {
-      var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
-       if (isTauri()) {
-                                        const { openUrl } = await import('@tauri-apps/plugin-opener');
-                                        await openUrl(vnpayAuthUrl);
-                                    } else {
-                                        window.open(vnpayAuthUrl, '_blank');
-                                    }
-      handleClose();
-  
+    var vnpayAuthUrl = "https://gravityland.vnoffice.io.vn";
+    if (isTauri()) {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(vnpayAuthUrl);
+    } else {
+      window.open(vnpayAuthUrl, '_blank');
+    }
+    handleClose();
+
   };
 
   const handleClose = () => {
+    // Prevent closing if force update is required
+    if (updateState === 'force') {
+      return;
+    }
     setIsClosing(true);
     setIsVisible(false);
     setTimeout(onClose, 400);
@@ -102,6 +116,8 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
     return null;
   }
 
+  const isForceUpdate = updateState === 'force';
+
   return (
     <div
       className={`
@@ -110,25 +126,33 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         ${isVisible && !isClosing ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'}
       `}
     >
-      <div className="
+      <div className={`
         relative overflow-hidden
         w-80 p-5
         rounded-2xl
-        border border-white/20 dark:border-white/10
+        ${isForceUpdate
+          ? 'border-2 border-red-500/50 dark:border-red-500/30'
+          : 'border border-white/20 dark:border-white/10'
+        }
         shadow-[0_8px_32px_0_rgba(31,38,135,0.15)]
         backdrop-blur-xl
-        bg-white/70 dark:bg-slate-900/60
+        ${isForceUpdate
+          ? 'bg-red-50/90 dark:bg-red-900/40'
+          : 'bg-white/70 dark:bg-slate-900/60'
+        }
         group
-      ">
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/30 transition-colors duration-500"></div>
-        <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/30 transition-colors duration-500"></div>
+      `}>
+        <div className={`absolute -top-10 -right-10 w-32 h-32 ${isForceUpdate ? 'bg-red-500/30' : 'bg-blue-500/20'} rounded-full blur-3xl pointer-events-none group-hover:${isForceUpdate ? 'bg-red-500/40' : 'bg-blue-500/30'} transition-colors duration-500`}></div>
+        <div className={`absolute -bottom-10 -left-10 w-32 h-32 ${isForceUpdate ? 'bg-orange-500/30' : 'bg-purple-500/20'} rounded-full blur-3xl pointer-events-none group-hover:${isForceUpdate ? 'bg-orange-500/40' : 'bg-purple-500/30'} transition-colors duration-500`}></div>
 
         <div className="relative z-10">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 shadow-sm">
+              <div className={`p-1.5 rounded-lg ${isForceUpdate ? 'bg-gradient-to-br from-red-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'} shadow-sm`}>
                 {updateState === 'ready' ? (
                   <CheckCircle className="w-4 h-4 text-white" />
+                ) : isForceUpdate ? (
+                  <AlertTriangle className="w-4 h-4 text-white" />
                 ) : (
                   <Sparkles className="w-4 h-4 text-white" />
                 )}
@@ -137,11 +161,13 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
                 <h3 className="font-bold text-gray-800 dark:text-white leading-tight">
                   {updateState === 'ready'
                     ? t('update_notification.ready')
-                    : t('update_notification.title')}
+                    : isForceUpdate
+                      ? t('update_notification.force_update_title')
+                      : t('update_notification.title')}
                 </h3>
                 {updateInfo && (
                   <div className="flex flex-col">
-                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                    <p className={`text-xs font-medium ${isForceUpdate ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
                       v{updateInfo.latest_version}
                     </p>
                     {updateInfo.source && updateInfo.source !== 'GitHub API' && (
@@ -154,11 +180,11 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               </div>
             </div>
 
-            {updateState !== 'downloading' && updateState !== 'ready' && (
+            {updateState !== 'downloading' && updateState !== 'ready' && !isForceUpdate && (
               <button
                 onClick={handleClose}
                 className="
-                  p-1 rounded-full 
+                  p-1 rounded-full
                   text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
                   hover:bg-black/5 dark:hover:bg-white/10
                   transition-all duration-200
@@ -174,28 +200,34 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
               {updateState === 'downloading' && t('update_notification.downloading')}
               {updateState === 'ready' && t('update_notification.restarting')}
+              {updateState === 'force' && updateInfo && t('update_notification.force_update_message', {
+                current: updateInfo.current_version,
+                min: updateInfo.min_version
+              })}
               {updateState === 'available' && updateInfo && t('update_notification.message', { current: updateInfo.current_version })}
             </p>
           </div>
-          
-          {updateState === 'available' && (
+
+          {(updateState === 'available' || updateState === 'force') && (
             <div className="flex gap-2">
               <button
                 onClick={handleAutoUpdate}
-                className="
+                className={`
                   flex-1 group/btn
                   relative overflow-hidden
-                  bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500
+                  ${isForceUpdate
+                    ? 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 shadow-lg shadow-red-500/25'
+                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-500/25'
+                  }
                   text-white font-medium
                   py-2.5 px-4 rounded-xl
-                  shadow-lg shadow-blue-500/25
                   transition-all duration-300
                   flex items-center justify-center gap-2
                   active:scale-[0.98]
-                "
+                `}
               >
                 <Download className="w-4 h-4" />
-                <span>{t('update_notification.auto_update')}</span>
+                <span>{isForceUpdate ? t('update_notification.force_update_button') : t('update_notification.auto_update')}</span>
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all duration-300" />
                 <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent z-20 pointer-events-none" />
               </button>
