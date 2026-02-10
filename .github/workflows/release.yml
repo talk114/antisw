@@ -104,12 +104,6 @@ jobs:
         with:
           name: release-assets-${{ matrix.platform }}-${{ strategy.job-index }}
           path: |
-          tag_name: ${{ github.ref_name }}
-          name: "Antigravity APP ${{ github.ref_name }}"
-          body: "See the assets to download this version and install."
-          draft: false
-          prerelease: false
-          files: |
             src-tauri/target/**/release/bundle/dmg/*.dmg
             src-tauri/target/**/release/bundle/deb/*.deb
             src-tauri/target/**/release/bundle/appimage/*.AppImage
