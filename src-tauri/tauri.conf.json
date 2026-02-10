@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AS",
-  "version": "4.1.2",
+  "productName": "AntiSwitcher",
+  "version": "4.1.11",
   "identifier": "as.antigravity.switcher",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "Antigravity Switcher",
+        "title": "AntiSwitcher",
         "width": 1024,
         "height": 700,
         "titleBarStyle": "Overlay",
@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,12 +43,12 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
+      "active": false,
       "endpoints": [
         "https://github.com/talk114/antisw/releases/latest/download/updater.json"
       ],
       "dialog": true,
-      "pubkey": "RWSQvAJOE+udAGSUoZB7Y7EhAGOyZkB1zHaKwRYfldgig5rIF+PVUDbo"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFRjVDRjdCREE1Rjg2NkYKUldSdmhsL2FlOC8xdnJuTzBtaTRhZkk1VWJ1cW5QWGU3ZWEwU20yZHRlZStxMnRWcUIzc3FwT2IK"
     },
     "process": null,
     "fs": null,

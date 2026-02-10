@@ -4,6 +4,7 @@ import { Plus, Trash2, RefreshCw, Copy, Activity, User, Settings, Shield, Clock,
 import { motion, AnimatePresence } from 'framer-motion';
 import { request as invoke } from '../utils/request';
 import { showToast } from '../components/common/ToastContainer';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface UserToken {
     id: string;
@@ -53,10 +54,11 @@ const UserToken: React.FC = () => {
     // Create Form State
     const [newUsername, setNewUsername] = useState('');
     const [newDesc, setNewDesc] = useState('');
-    const [newExpiresType, setNewExpiresType] = useState('month'); // day, week, month, never
+    const [newExpiresType, setNewExpiresType] = useState('month'); // day, week, month, never, custom
     const [newMaxIps, setNewMaxIps] = useState(0);
     const [newCurfewStart, setNewCurfewStart] = useState('');
     const [newCurfewEnd, setNewCurfewEnd] = useState('');
+    const [newCustomExpires, setNewCustomExpires] = useState(''); // datetime-local value
 
     const loadData = async () => {
         setLoading(true);
@@ -85,16 +87,28 @@ const UserToken: React.FC = () => {
             return;
         }
 
+        // 验证自定义时间
+        if (newExpiresType === 'custom' && !newCustomExpires) {
+            showToast(t('user_token.custom_expires_required') || 'Please select a custom expiration time', 'error');
+            return;
+        }
+
         setCreating(true);
         try {
+            // 计算自定义过期时间戳
+            const customExpiresAt = newExpiresType === 'custom' && newCustomExpires
+                ? Math.floor(new Date(newCustomExpires).getTime() / 1000)
+                : undefined;
+
             await invoke('create_user_token', {
                 request: {
                     username: newUsername,
                     expires_type: newExpiresType,
-                    description: newDesc || undefined,
+                    description: newDesc || null,
                     max_ips: newMaxIps,
-                    curfew_start: newCurfewStart || undefined,
-                    curfew_end: newCurfewEnd || undefined
+                    curfew_start: newCurfewStart || null,
+                    curfew_end: newCurfewEnd || null,
+                    custom_expires_at: customExpiresAt || null
                 }
             });
             showToast(t('common.create_success') || 'Created successfully', 'success');
@@ -105,6 +119,7 @@ const UserToken: React.FC = () => {
             setNewMaxIps(0);
             setNewCurfewStart('');
             setNewCurfewEnd('');
+            setNewCustomExpires('');
             loadData();
         } catch (e) {
             console.error('Failed to create token', e);
@@ -125,12 +140,13 @@ const UserToken: React.FC = () => {
     };
 
     const handleEdit = (token: UserToken) => {
+        console.log('Editing token:', token); // 调试日志
         setEditingToken(token);
         setEditUsername(token.username);
         setEditDesc(token.description || '');
-        setEditMaxIps(token.max_ips);
-        setEditCurfewStart(token.curfew_start || '');
-        setEditCurfewEnd(token.curfew_end || '');
+        setEditMaxIps(token.max_ips ?? 0);  // 使用 ?? 确保 null/undefined 变为 0
+        setEditCurfewStart(token.curfew_start ?? '');
+        setEditCurfewEnd(token.curfew_end ?? '');
         setShowEditModal(true);
     };
 
@@ -149,8 +165,9 @@ const UserToken: React.FC = () => {
                     username: editUsername,
                     description: editDesc || undefined,
                     max_ips: editMaxIps,
-                    curfew_start: editCurfewStart || null,
-                    curfew_end: editCurfewEnd || null
+                    // 使用双层包装: undefined = 不更新, null = 清空, string = 设置值
+                    curfew_start: editCurfewStart === '' ? null : editCurfewStart,
+                    curfew_end: editCurfewEnd === '' ? null : editCurfewEnd
                 }
             });
             showToast(t('common.update_success') || 'Updated successfully', 'success');
@@ -175,9 +192,13 @@ const UserToken: React.FC = () => {
         }
     };
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        showToast(t('common.copied') || 'Copied to clipboard', 'success');
+    const handleCopyToken = async (text: string) => {
+        const success = await copyToClipboard(text);
+        if (success) {
+            showToast(t('common.copied') || 'Copied to clipboard', 'success');
+        } else {
+            showToast(t('common.copy_failed') || 'Failed to copy to clipboard', 'error');
+        }
     };
 
     const formatTime = (ts?: number) => {
@@ -191,6 +212,7 @@ const UserToken: React.FC = () => {
             case 'week': return t('user_token.expires_week', { defaultValue: '1 Week' });
             case 'month': return t('user_token.expires_month', { defaultValue: '1 Month' });
             case 'never': return t('user_token.expires_never', { defaultValue: 'Never' });
+            case 'custom': return t('user_token.expires_custom', { defaultValue: 'Custom' });
             default: return type;
         }
     };
@@ -334,7 +356,7 @@ const UserToken: React.FC = () => {
                                                 {token.token.substring(0, 8)}••••••••
                                             </code>
                                             <button
-                                                onClick={() => copyToClipboard(token.token)}
+                                                onClick={() => handleCopyToken(token.token)}
                                                 className="p-1.5 hover:bg-gray-200 dark:hover:bg-base-300 rounded-md transition-all text-gray-400 hover:text-gray-600 dark:hover:text-white"
                                             >
                                                 <Copy size={13} />
@@ -478,6 +500,7 @@ const UserToken: React.FC = () => {
                                     <option value="day">{t('user_token.expires_day', { defaultValue: '1 Day' })}</option>
                                     <option value="week">{t('user_token.expires_week', { defaultValue: '1 Week' })}</option>
                                     <option value="month">{t('user_token.expires_month', { defaultValue: '1 Month' })}</option>
+                                    <option value="custom">{t('user_token.expires_custom', { defaultValue: 'Custom' })}</option>
                                     <option value="never">{t('user_token.expires_never', { defaultValue: 'Never' })}</option>
                                 </select>
                             </div>
@@ -499,6 +522,25 @@ const UserToken: React.FC = () => {
                                 </label>
                             </div>
                         </div>
+
+                        {/* Custom Expiration Time Picker */}
+                        {newExpiresType === 'custom' && (
+                            <div className="form-control w-full mb-3">
+                                <label className="label">
+                                    <span className="label-text">{t('user_token.custom_expires_at', { defaultValue: 'Expiration Date & Time' })} *</span>
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    className="input input-bordered w-full"
+                                    value={newCustomExpires}
+                                    onChange={e => setNewCustomExpires(e.target.value)}
+                                    min={new Date().toISOString().slice(0, 16)}
+                                />
+                                <label className="label">
+                                    <span className="label-text-alt text-gray-500">{t('user_token.hint_custom_expires', { defaultValue: 'Select the exact date and hour when this token expires' })}</span>
+                                </label>
+                            </div>
+                        )}
 
                         <div className="form-control w-full mb-3">
                             <label className="label">

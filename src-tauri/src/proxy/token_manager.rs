@@ -1,6 +1,6 @@
 // 移除冗余的顶层导入，因为这些在代码中已由 full path 或局部导入处理
 use dashmap::DashMap;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -33,6 +33,7 @@ pub struct ProxyToken {
     pub reset_time: Option<i64>,           // [NEW] 配额刷新时间戳（用于排序优化）
     pub validation_blocked: bool,          // [NEW] Check for validation block (VALIDATION_REQUIRED temporary block)
     pub validation_blocked_until: i64,     // [NEW] Timestamp until which the account is blocked
+    pub model_quotas: HashMap<String, i32>, // [OPTIMIZATION] In-memory cache for model-specific quotas
 }
 
 pub struct TokenManager {
@@ -175,17 +176,10 @@ impl TokenManager {
                 Ok(())
             }
             Ok(None) => {
+                // [FIX] 账号被禁用或不可用时，从内存池中彻底移除 (Issue #1565)
                 // load_single_account returning None means the account should be skipped in its
                 // current state (disabled / proxy_disabled / quota_protection / validation_blocked...).
-                // Purge any existing in-memory cache to avoid selecting a disabled account.
                 self.remove_account(account_id);
-                // Ensure preferred account flag is cleared even under contention.
-                {
-                    let mut preferred = self.preferred_account_id.write().await;
-                    if preferred.as_deref() == Some(account_id) {
-                        *preferred = None;
-                    }
-                }
                 Ok(())
             }
             Err(e) => Err(format!("同步账号失败: {}", e)),
@@ -280,6 +274,11 @@ impl TokenManager {
                 .unwrap_or(false)
                 || account
                     .get("proxy_disabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                || account
+                    .get("quota")
+                    .and_then(|q| q.get("is_forbidden"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
@@ -486,6 +485,19 @@ impl TokenManager {
         // [NEW] 提取最近的配额刷新时间（用于排序优化：刷新时间越近优先级越高）
         let reset_time = self.extract_earliest_reset_time(&account);
 
+        // [OPTIMIZATION] 构建模型配额内存缓存，避免排序时读取磁盘
+        let mut model_quotas = HashMap::new();
+        if let Some(models) = account.get("quota").and_then(|q| q.get("models")).and_then(|m| m.as_array()) {
+            for model in models {
+                if let (Some(name), Some(pct)) = (model.get("name").and_then(|v| v.as_str()), model.get("percentage").and_then(|v| v.as_i64())) {
+                    // Normalize name to standard ID
+                    let standard_id = crate::proxy::common::model_mapping::normalize_to_standard_id(name)
+                        .unwrap_or_else(|| name.to_string());
+                    model_quotas.insert(standard_id, pct as i32);
+                }
+            }
+        }
+
         Ok(Some(ProxyToken {
             account_id,
             access_token,
@@ -502,6 +514,7 @@ impl TokenManager {
             reset_time,
             validation_blocked: account.get("validation_blocked").and_then(|v| v.as_bool()).unwrap_or(false),
             validation_blocked_until: account.get("validation_blocked_until").and_then(|v| v.as_i64()).unwrap_or(0),
+            model_quotas,
         }))
     }
 
@@ -665,6 +678,7 @@ impl TokenManager {
     /// # 参数
     /// * `account_path` - 账号 JSON 文件路径
     /// * `model_name` - 目标模型名称（已标准化）
+    #[allow(dead_code)] // 预留给精确配额读取逻辑
     fn get_model_quota_from_json(account_path: &PathBuf, model_name: &str) -> Option<i32> {
         let content = std::fs::read_to_string(account_path).ok()?;
         let account: serde_json::Value = serde_json::from_str(&content).ok()?;
@@ -728,6 +742,9 @@ impl TokenManager {
             // 3. 写入磁盘
             std::fs::write(account_path, serde_json::to_string_pretty(account_json).unwrap())
                 .map_err(|e| format!("写入文件失败: {}", e))?;
+
+            // [FIX] 触发 TokenManager 的账号重新加载信号，确保内存中的 protected_models 同步
+            crate::proxy::server::trigger_account_reload(account_id);
 
             return Ok(true);
         }
@@ -985,22 +1002,56 @@ impl TokenManager {
             return Err("Token pool is empty".to_string());
         }
 
-        // ===== 【优化】Quota-First 排序: 保护低配额账号，均衡使用 =====
-        // 优先级: 目标模型配额 > 健康分 > 订阅等级 > 刷新时间
-        // -> 高配额账号优先被选中，避免 PRO/ULTRA 先用完丢失5小时刷新周期
-        // [FIX] 使用目标模型的 quota 而非 max(所有模型)
-        const RESET_TIME_THRESHOLD_SECS: i64 = 600; // 10 分钟阈值，差异小于此值视为相同
+        // [NEW] 1. 动态能力过滤 (Capability Filter)
+        
+        // 定义常量
+        const RESET_TIME_THRESHOLD_SECS: i64 = 600; // 10 分钟阈值
 
-        let normalized_target =
-            crate::proxy::common::model_mapping::normalize_to_standard_id(target_model)
-                .unwrap_or_else(|| target_model.to_string());
+        // 归一化目标模型名为标准 ID
+        let normalized_target = crate::proxy::common::model_mapping::normalize_to_standard_id(target_model)
+            .unwrap_or_else(|| target_model.to_string());
+
+        // 仅保留明确拥有该模型配额的账号
+        // 这一步确保了 "保证有模型才可以进入轮询"，特别是对 Opus 4.6 等高端模型
+        let candidate_count_before = tokens_snapshot.len();
+        
+        // 此处假设所有受支持的模型都会出现在 model_quotas 中
+        // 如果 API 返回的配额信息不完整，可能会导致误杀，但为了严格性，我们执行此过滤
+        tokens_snapshot.retain(|t| t.model_quotas.contains_key(&normalized_target));
+
+        if tokens_snapshot.is_empty() {
+            if candidate_count_before > 0 {
+                // 如果过滤前有账号，过滤后没了，说明所有账号都没有该模型的配额
+                tracing::warn!("No accounts have satisfied quota for model: {}", normalized_target);
+                return Err(format!("No accounts available with quota for model: {}", normalized_target));
+            }
+            return Err("Token pool is empty".to_string());
+        }
 
         tokens_snapshot.sort_by(|a, b| {
+            // Priority 0: 严格的订阅等级排序 (ULTRA > PRO > FREE)
+            // 用户要求：轮询应当遵循 Ultra -> Pro -> Free
+            // 既然已经过滤掉了不支持该模型的账号，剩下的都是支持的
+            // 此时我们优先使用高级订阅
+            let tier_priority = |tier: &Option<String>| {
+                let t = tier.as_deref().unwrap_or("").to_lowercase();
+                if t.contains("ultra") { 0 }
+                else if t.contains("pro") { 1 }
+                else if t.contains("free") { 2 }
+                else { 3 }
+            };
+
+            let tier_cmp = tier_priority(&a.subscription_tier)
+                .cmp(&tier_priority(&b.subscription_tier));
+            if tier_cmp != std::cmp::Ordering::Equal {
+                return tier_cmp;
+            }
+
             // Priority 1: 目标模型的 quota (higher is better) -> 保护低配额账号
-            let quota_a = Self::get_model_quota_from_json(&a.account_path, &normalized_target)
-                .unwrap_or(a.remaining_quota.unwrap_or(0));
-            let quota_b = Self::get_model_quota_from_json(&b.account_path, &normalized_target)
-                .unwrap_or(b.remaining_quota.unwrap_or(0));
+            // 经过过滤，key 肯定存在
+            let quota_a = a.model_quotas.get(&normalized_target).copied().unwrap_or(0);
+            let quota_b = b.model_quotas.get(&normalized_target).copied().unwrap_or(0);
+
             let quota_cmp = quota_b.cmp(&quota_a);
             if quota_cmp != std::cmp::Ordering::Equal {
                 return quota_cmp;
@@ -1013,21 +1064,7 @@ impl TokenManager {
                 return health_cmp;
             }
 
-            // Priority 3: Subscription tier (ULTRA > PRO > FREE) -> 平局时高级账号优先
-            let tier_priority = |tier: &Option<String>| {
-                let t = tier.as_deref().unwrap_or("").to_lowercase();
-                if t.contains("ultra") { 0 }
-                else if t.contains("pro") { 1 }
-                else if t.contains("free") { 2 }
-                else { 3 }
-            };
-            let tier_cmp = tier_priority(&a.subscription_tier)
-                .cmp(&tier_priority(&b.subscription_tier));
-            if tier_cmp != std::cmp::Ordering::Equal {
-                return tier_cmp;
-            }
-
-            // Priority 4: Reset time (earlier is better, but only if diff > 10 min)
+            // Priority 3: Reset time (earlier is better, but only if diff > 10 min)
             let reset_a = a.reset_time.unwrap_or(i64::MAX);
             let reset_b = b.reset_time.unwrap_or(i64::MAX);
             if (reset_a - reset_b).abs() >= RESET_TIME_THRESHOLD_SECS {
@@ -1044,7 +1081,7 @@ impl TokenManager {
             tokens_snapshot.iter().map(|t| format!(
                 "{}(quota={}%, reset={:?}, health={:.2})",
                 t.email,
-                Self::get_model_quota_from_json(&t.account_path, &normalized_target).unwrap_or(0),
+                t.model_quotas.get(&normalized_target).copied().unwrap_or(0),
                 t.reset_time.map(|ts| {
                     let now = chrono::Utc::now().timestamp();
                     let diff_secs = ts - now;
@@ -1373,7 +1410,6 @@ impl TokenManager {
             let mut token = match target_token {
                 Some(t) => t,
                 None => {
-                    let mut wait_ms = 0;
                     // 乐观重置策略: 双层防护机制
                     // 计算最短等待时间
                     let min_wait = tokens_snapshot
@@ -1384,7 +1420,7 @@ impl TokenManager {
                     // Layer 1: 如果最短等待时间 <= 2秒,执行缓冲延迟
                     if let Some(wait_sec) = min_wait {
                         if wait_sec <= 2 {
-                            wait_ms = (wait_sec as f64 * 1000.0) as u64;
+                            let wait_ms = (wait_sec as f64 * 1000.0) as u64;
                             tracing::warn!(
                                 "All accounts rate-limited but shortest wait is {}s. Applying {}ms buffer for state sync...",
                                 wait_sec, wait_ms
@@ -1395,7 +1431,9 @@ impl TokenManager {
 
                             // 重新尝试选择账号
                             let retry_token = tokens_snapshot.iter()
-                                .find(|t| !attempted.contains(&t.account_id) && !self.is_rate_limited_sync(&t.account_id, None));
+                                .find(|t| !attempted.contains(&t.account_id) 
+                                    && !self.is_rate_limited_sync(&t.account_id, Some(&normalized_target))
+                                    && !(quota_protection_enabled && t.protected_models.contains(&normalized_target)));
 
                             if let Some(t) = retry_token {
                                 tracing::info!(
@@ -1416,7 +1454,8 @@ impl TokenManager {
                                 // 再次尝试选择账号
                                 let final_token = tokens_snapshot
                                     .iter()
-                                    .find(|t| !attempted.contains(&t.account_id));
+                                    .find(|t| !attempted.contains(&t.account_id)
+                                        && !(quota_protection_enabled && t.protected_models.contains(&normalized_target)));
 
                                 if let Some(t) = final_token {
                                     tracing::info!(
@@ -2371,6 +2410,53 @@ impl TokenManager {
     pub async fn set_validation_block_public(&self, account_id: &str, block_until: i64, reason: &str) -> Result<(), String> {
         self.set_validation_block(account_id, block_until, reason).await
     }
+
+    /// Set is_forbidden status for an account (called when proxy encounters 403)
+    pub async fn set_forbidden(&self, account_id: &str, reason: &str) -> Result<(), String> {
+        // 1. Persist to disk - update quota.is_forbidden in account JSON
+        let path = self.data_dir.join("accounts").join(format!("{}.json", account_id));
+        if !path.exists() {
+            return Err(format!("Account file not found: {:?}", path));
+        }
+
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read account file: {}", e))?;
+
+        let mut account: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse account JSON: {}", e))?;
+
+        // Update quota.is_forbidden
+        if let Some(quota) = account.get_mut("quota") {
+            quota["is_forbidden"] = serde_json::Value::Bool(true);
+        } else {
+            // Create quota object if not exists
+            account["quota"] = serde_json::json!({
+                "models": [],
+                "last_updated": chrono::Utc::now().timestamp(),
+                "is_forbidden": true
+            });
+        }
+
+        // Clear sticky session if forbidden
+        self.session_accounts.retain(|_, v| *v != account_id);
+
+        let json_str = serde_json::to_string_pretty(&account)
+            .map_err(|e| format!("Failed to serialize account JSON: {}", e))?;
+
+        std::fs::write(&path, json_str)
+            .map_err(|e| format!("Failed to write account file: {}", e))?;
+
+        // [FIX] 从内存池中移除账号，避免重试时再次选中
+        self.remove_account(account_id);
+
+        tracing::warn!(
+            "🚫 Account {} marked as forbidden (403): {}",
+            account_id,
+            truncate_reason(reason, 100)
+        );
+
+        Ok(())
+    }
 }
 
 /// 截断过长的原因字符串
@@ -2604,6 +2690,7 @@ mod tests {
             reset_time,
             validation_blocked: false,
             validation_blocked_until: 0,
+            model_quotas: HashMap::new(),
         }
     }
 
@@ -2859,6 +2946,7 @@ mod tests {
             reset_time: None,
             validation_blocked: false,
             validation_blocked_until: 0,
+            model_quotas: HashMap::new(),
         }
     }
 
@@ -2960,5 +3048,249 @@ mod tests {
 
         let result = manager.select_with_p2c(&candidates, &attempted, "claude-sonnet", false);
         assert!(result.is_none());
+    }
+
+    // ===== Ultra 优先逻辑测试 =====
+
+    /// 测试 is_ultra_required_model 辅助函数
+    #[test]
+    fn test_is_ultra_required_model() {
+        // 需要 Ultra 账号的高端模型
+        const ULTRA_REQUIRED_MODELS: &[&str] = &[
+            "claude-opus-4-6",
+            "claude-opus-4-5",
+            "opus",
+        ];
+
+        fn is_ultra_required_model(model: &str) -> bool {
+            let lower = model.to_lowercase();
+            ULTRA_REQUIRED_MODELS.iter().any(|m| lower.contains(m))
+        }
+
+        // 应该识别为高端模型
+        assert!(is_ultra_required_model("claude-opus-4-6"));
+        assert!(is_ultra_required_model("claude-opus-4-5"));
+        assert!(is_ultra_required_model("Claude-Opus-4-6")); // 大小写不敏感
+        assert!(is_ultra_required_model("CLAUDE-OPUS-4-5")); // 大小写不敏感
+        assert!(is_ultra_required_model("opus")); // 通配匹配
+        assert!(is_ultra_required_model("opus-4-6-latest"));
+        assert!(is_ultra_required_model("models/claude-opus-4-6"));
+
+        // 应该识别为普通模型
+        assert!(!is_ultra_required_model("claude-sonnet-4-5"));
+        assert!(!is_ultra_required_model("claude-sonnet"));
+        assert!(!is_ultra_required_model("gemini-1.5-flash"));
+        assert!(!is_ultra_required_model("gemini-2.0-pro"));
+        assert!(!is_ultra_required_model("claude-haiku"));
+    }
+
+    /// 测试高端模型排序：Ultra 账号优先于 Pro 账号（即使 Pro 配额更高）
+    #[test]
+    fn test_ultra_priority_for_high_end_models() {
+        const RESET_TIME_THRESHOLD_SECS: i64 = 600;
+
+        // 模拟高端模型排序逻辑
+        fn compare_tokens_for_model(a: &ProxyToken, b: &ProxyToken, target_model: &str) -> Ordering {
+            const ULTRA_REQUIRED_MODELS: &[&str] = &["claude-opus-4-6", "claude-opus-4-5", "opus"];
+            let requires_ultra = {
+                let lower = target_model.to_lowercase();
+                ULTRA_REQUIRED_MODELS.iter().any(|m| lower.contains(m))
+            };
+
+            let tier_priority = |tier: &Option<String>| {
+                let t = tier.as_deref().unwrap_or("").to_lowercase();
+                if t.contains("ultra") { 0 }
+                else if t.contains("pro") { 1 }
+                else if t.contains("free") { 2 }
+                else { 3 }
+            };
+
+            // Priority 0: 高端模型时，订阅等级优先
+            if requires_ultra {
+                let tier_cmp = tier_priority(&a.subscription_tier)
+                    .cmp(&tier_priority(&b.subscription_tier));
+                if tier_cmp != Ordering::Equal {
+                    return tier_cmp;
+                }
+            }
+
+            // Priority 1: Quota (higher is better)
+            let quota_a = a.remaining_quota.unwrap_or(0);
+            let quota_b = b.remaining_quota.unwrap_or(0);
+            let quota_cmp = quota_b.cmp(&quota_a);
+            if quota_cmp != Ordering::Equal {
+                return quota_cmp;
+            }
+
+            // Priority 2: Health score
+            let health_cmp = b.health_score.partial_cmp(&a.health_score)
+                .unwrap_or(Ordering::Equal);
+            if health_cmp != Ordering::Equal {
+                return health_cmp;
+            }
+
+            // Priority 3: Tier (for non-high-end models)
+            if !requires_ultra {
+                let tier_cmp = tier_priority(&a.subscription_tier)
+                    .cmp(&tier_priority(&b.subscription_tier));
+                if tier_cmp != Ordering::Equal {
+                    return tier_cmp;
+                }
+            }
+
+            Ordering::Equal
+        }
+
+        // 创建测试账号：Ultra 低配额 vs Pro 高配额
+        let ultra_low_quota = create_test_token("ultra@test.com", Some("ULTRA"), 1.0, None, Some(20));
+        let pro_high_quota = create_test_token("pro@test.com", Some("PRO"), 1.0, None, Some(80));
+
+        // 高端模型 (Opus 4.6): Ultra 应该优先，即使配额低
+        assert_eq!(
+            compare_tokens_for_model(&ultra_low_quota, &pro_high_quota, "claude-opus-4-6"),
+            Ordering::Less, // Ultra 排在前面
+            "Opus 4.6 should prefer Ultra account over Pro even with lower quota"
+        );
+
+        // 高端模型 (Opus 4.5): Ultra 应该优先
+        assert_eq!(
+            compare_tokens_for_model(&ultra_low_quota, &pro_high_quota, "claude-opus-4-5"),
+            Ordering::Less,
+            "Opus 4.5 should prefer Ultra account over Pro"
+        );
+
+        // 普通模型 (Sonnet): 高配额 Pro 应该优先
+        assert_eq!(
+            compare_tokens_for_model(&ultra_low_quota, &pro_high_quota, "claude-sonnet-4-5"),
+            Ordering::Greater, // Pro (高配额) 排在前面
+            "Sonnet should prefer high-quota Pro over low-quota Ultra"
+        );
+
+        // 普通模型 (Flash): 高配额 Pro 应该优先
+        assert_eq!(
+            compare_tokens_for_model(&ultra_low_quota, &pro_high_quota, "gemini-1.5-flash"),
+            Ordering::Greater,
+            "Flash should prefer high-quota Pro over low-quota Ultra"
+        );
+    }
+
+    /// 测试排序：同为 Ultra 时按配额排序
+    #[test]
+    fn test_ultra_accounts_sorted_by_quota() {
+        fn compare_tokens_for_model(a: &ProxyToken, b: &ProxyToken, target_model: &str) -> Ordering {
+            const ULTRA_REQUIRED_MODELS: &[&str] = &["claude-opus-4-6", "claude-opus-4-5", "opus"];
+            let requires_ultra = {
+                let lower = target_model.to_lowercase();
+                ULTRA_REQUIRED_MODELS.iter().any(|m| lower.contains(m))
+            };
+
+            let tier_priority = |tier: &Option<String>| {
+                let t = tier.as_deref().unwrap_or("").to_lowercase();
+                if t.contains("ultra") { 0 }
+                else if t.contains("pro") { 1 }
+                else if t.contains("free") { 2 }
+                else { 3 }
+            };
+
+            if requires_ultra {
+                let tier_cmp = tier_priority(&a.subscription_tier)
+                    .cmp(&tier_priority(&b.subscription_tier));
+                if tier_cmp != Ordering::Equal {
+                    return tier_cmp;
+                }
+            }
+
+            let quota_a = a.remaining_quota.unwrap_or(0);
+            let quota_b = b.remaining_quota.unwrap_or(0);
+            quota_b.cmp(&quota_a)
+        }
+
+        let ultra_high = create_test_token("ultra_high@test.com", Some("ULTRA"), 1.0, None, Some(80));
+        let ultra_low = create_test_token("ultra_low@test.com", Some("ULTRA"), 1.0, None, Some(20));
+
+        // Opus 4.6: 同为 Ultra，高配额优先
+        assert_eq!(
+            compare_tokens_for_model(&ultra_high, &ultra_low, "claude-opus-4-6"),
+            Ordering::Less, // ultra_high 排在前面
+            "Among Ultra accounts, higher quota should come first"
+        );
+    }
+
+    /// 测试完整排序场景：混合账号池
+    #[test]
+    fn test_full_sorting_mixed_accounts() {
+        fn sort_tokens_for_model(tokens: &mut Vec<ProxyToken>, target_model: &str) {
+            const ULTRA_REQUIRED_MODELS: &[&str] = &["claude-opus-4-6", "claude-opus-4-5", "opus"];
+            let requires_ultra = {
+                let lower = target_model.to_lowercase();
+                ULTRA_REQUIRED_MODELS.iter().any(|m| lower.contains(m))
+            };
+
+            tokens.sort_by(|a, b| {
+                let tier_priority = |tier: &Option<String>| {
+                    let t = tier.as_deref().unwrap_or("").to_lowercase();
+                    if t.contains("ultra") { 0 }
+                    else if t.contains("pro") { 1 }
+                    else if t.contains("free") { 2 }
+                    else { 3 }
+                };
+
+                if requires_ultra {
+                    let tier_cmp = tier_priority(&a.subscription_tier)
+                        .cmp(&tier_priority(&b.subscription_tier));
+                    if tier_cmp != Ordering::Equal {
+                        return tier_cmp;
+                    }
+                }
+
+                let quota_a = a.remaining_quota.unwrap_or(0);
+                let quota_b = b.remaining_quota.unwrap_or(0);
+                let quota_cmp = quota_b.cmp(&quota_a);
+                if quota_cmp != Ordering::Equal {
+                    return quota_cmp;
+                }
+
+                if !requires_ultra {
+                    let tier_cmp = tier_priority(&a.subscription_tier)
+                        .cmp(&tier_priority(&b.subscription_tier));
+                    if tier_cmp != Ordering::Equal {
+                        return tier_cmp;
+                    }
+                }
+
+                Ordering::Equal
+            });
+        }
+
+        // 创建混合账号池
+        let ultra_high = create_test_token("ultra_high@test.com", Some("ULTRA"), 1.0, None, Some(80));
+        let ultra_low = create_test_token("ultra_low@test.com", Some("ULTRA"), 1.0, None, Some(20));
+        let pro_high = create_test_token("pro_high@test.com", Some("PRO"), 1.0, None, Some(90));
+        let pro_low = create_test_token("pro_low@test.com", Some("PRO"), 1.0, None, Some(30));
+        let free = create_test_token("free@test.com", Some("FREE"), 1.0, None, Some(100));
+
+        // 高端模型 (Opus 4.6) 排序
+        let mut tokens_opus = vec![pro_high.clone(), free.clone(), ultra_low.clone(), pro_low.clone(), ultra_high.clone()];
+        sort_tokens_for_model(&mut tokens_opus, "claude-opus-4-6");
+
+        let emails_opus: Vec<&str> = tokens_opus.iter().map(|t| t.email.as_str()).collect();
+        // 期望顺序: Ultra(高配额) > Ultra(低配额) > Pro(高配额) > Pro(低配额) > Free
+        assert_eq!(
+            emails_opus,
+            vec!["ultra_high@test.com", "ultra_low@test.com", "pro_high@test.com", "pro_low@test.com", "free@test.com"],
+            "Opus 4.6 should sort Ultra first, then by quota within each tier"
+        );
+
+        // 普通模型 (Sonnet) 排序
+        let mut tokens_sonnet = vec![pro_high.clone(), free.clone(), ultra_low.clone(), pro_low.clone(), ultra_high.clone()];
+        sort_tokens_for_model(&mut tokens_sonnet, "claude-sonnet-4-5");
+
+        let emails_sonnet: Vec<&str> = tokens_sonnet.iter().map(|t| t.email.as_str()).collect();
+        // 期望顺序: Free(100%) > Pro(90%) > Ultra(80%) > Pro(30%) > Ultra(20%) - 按配额优先
+        assert_eq!(
+            emails_sonnet,
+            vec!["free@test.com", "pro_high@test.com", "ultra_high@test.com", "pro_low@test.com", "ultra_low@test.com"],
+            "Sonnet should sort by quota first, then by tier as tiebreaker"
+        );
     }
 }

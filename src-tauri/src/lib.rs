@@ -77,9 +77,6 @@ pub fn run() {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
         rt.block_on(async {
             // Initialize states manually
-            let proxy_state = commands::proxy::ProxyServiceState::new();
-            let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
-
             // [FIX] Initialize log bridge for headless mode
             // Pass a dummy app handle or None since we don't have a Tauri app handle in headless mode
             // Actually log_bridge relies on AppHandle to emit events.
@@ -101,8 +98,25 @@ pub fn run() {
             match modules::config::load_app_config() {
                 Ok(mut config) => {
                     let mut modified = false;
-                    // Force LAN access in headless/docker mode so it binds to 0.0.0.0
-                    config.proxy.allow_lan_access = true;
+                    // Headless/docker 默认允许 LAN 访问（绑定 0.0.0.0）
+                    // 若设置 ABV_BIND_LOCAL_ONLY，则仅绑定 127.0.0.1
+                    let bind_local_only = std::env::var("ABV_BIND_LOCAL_ONLY")
+                        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                        .unwrap_or(false);
+                    if bind_local_only {
+                        config.proxy.allow_lan_access = false;
+                        modified = true;
+                    } else {
+                        config.proxy.allow_lan_access = true;
+                    }
+
+                    // [FIX] Force auth mode to AllExceptHealth in headless mode if it's Off or Auto
+                    // This ensures Web UI login validation works properly
+                    if matches!(config.proxy.auth_mode, crate::proxy::ProxyAuthMode::Off | crate::proxy::ProxyAuthMode::Auto) {
+                        info!("Headless mode: Forcing auth_mode to AllExceptHealth for Web UI security");
+                        config.proxy.auth_mode = crate::proxy::ProxyAuthMode::AllExceptHealth;
+                        modified = true;
+                    }
 
                     // [NEW] 支持通过环境变量注入 API Key
                     // 优先级：ABV_API_KEY > API_KEY > 配置文件
@@ -415,6 +429,7 @@ pub fn run() {
             // Warmup commands
             commands::warm_up_all_accounts,
             commands::warm_up_account,
+            commands::update_account_label,
             // HTTP API settings commands
             commands::get_http_api_settings,
             commands::save_http_api_settings,
@@ -433,6 +448,14 @@ pub fn run() {
             proxy::cli_sync::execute_cli_sync,
             proxy::cli_sync::execute_cli_restore,
             proxy::cli_sync::get_cli_config_content,
+            proxy::opencode_sync::get_opencode_sync_status,
+            proxy::opencode_sync::execute_opencode_sync,
+            proxy::opencode_sync::execute_opencode_restore,
+            proxy::opencode_sync::get_opencode_config_content,
+            proxy::droid_sync::get_droid_sync_status,
+            proxy::droid_sync::execute_droid_sync,
+            proxy::droid_sync::execute_droid_restore,
+            proxy::droid_sync::get_droid_config_content,
             // Security/IP monitoring commands
             commands::security::get_ip_access_logs,
             commands::security::get_ip_stats,
