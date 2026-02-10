@@ -41,7 +41,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
+          # cache disabled because package-lock.json is gitignored
 
       - name: Install frontend dependencies
         run: npm install --legacy-peer-deps
