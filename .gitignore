@@ -23,6 +23,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+package-lock.json
+src-tauri/Cargo.lock
 
 # Build output
 src-tauri/target/

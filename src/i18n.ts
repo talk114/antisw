@@ -25,7 +25,7 @@ i18n
             "vi-VN": {
                 translation: vi,
             },
-        },
+                  },
         fallbackLng: "en",
         debug: false, // Set to true for development
 
