@@ -14,8 +14,14 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+          # - platform: "macos-latest"
+          #   args: "--target x86_64-apple-darwin"
+          - platform: "macos-latest"
             args: "--target universal-apple-darwin"
           - platform: "ubuntu-22.04"
+            args: ""
+          - platform: "ubuntu-24.04-arm"
             args: ""
           - platform: "windows-latest"
             args: ""
@@ -41,7 +47,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # cache disabled because package-lock.json is gitignored
+          cache: "npm"
 
       - name: Install frontend dependencies
         run: npm install --legacy-peer-deps
@@ -73,9 +79,9 @@ jobs:
           cd src-tauri/target/*/release/bundle/macos/
           
           # 重命名 .app.tar.gz 和 .sig
-          if [ -f "Antigravity Tools.app.tar.gz" ]; then
-            mv "Antigravity Tools.app.tar.gz" "Antigravity Tools_${ARCH}.app.tar.gz"
-            mv "Antigravity Tools.app.tar.gz.sig" "Antigravity Tools_${ARCH}.app.tar.gz.sig"
+          if [ -f "AntiSwitcher.app.tar.gz" ]; then
+            mv "AntiSwitcher.app.tar.gz" "AntiSwitcher_${ARCH}.app.tar.gz"
+            mv "AntiSwitcher.app.tar.gz.sig" "AntiSwitcher_${ARCH}.app.tar.gz.sig"
             echo "Renamed assets to append Arch: $ARCH"
           fi
           
@@ -87,11 +93,11 @@ jobs:
           
           if [ -f "$UPDATER_JSON" ]; then
             echo "Updating $UPDATER_JSON to use renamed assets..."
-            sed -i '' "s/Antigravity%20Tools.app.tar.gz/Antigravity%20Tools_${ARCH}.app.tar.gz/g" "$UPDATER_JSON"
+            sed -i '' "s/AntiSwitcher.app.tar.gz/AntiSwitcher_${ARCH}.app.tar.gz/g" "$UPDATER_JSON"
           fi
 
       # 1. 上传 updater.json 到 Artifacts (供后续合并使用)
-      - name: Upload updater jsonv2
+      - name: Upload updater json
         uses: actions/upload-artifact@v4
         with:
           name: updater-json-${{ matrix.platform }}-${{ strategy.job-index }}
@@ -170,8 +176,11 @@ jobs:
         uses: ncipollo/release-action@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ github.ref_name }}
-          body_path: release_notes.md
-          files: updater.json
-          # 确保不覆盖已存在的其他 assets (softprops/action-gh-release 默认是追加)
-
+          allowUpdates: true
+          name: "AntiSwitcher ${{ github.ref_name }}"
+          bodyFile: "release_notes.md"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "all-artifacts/**/*,updater.json"
+          artifactErrorsFailBuild: false
+          replacesArtifacts: true
+          makeLatest: legacy
