@@ -13,6 +13,8 @@ pub mod cloudflared;
 pub mod security;
 // 导出 proxy_pool 命令
 pub mod proxy_pool;
+// 导出 tracking 命令
+pub mod tracking;
 // 导出 user_token 命令
 pub mod user_token;
 
@@ -756,6 +758,21 @@ pub async fn should_check_updates() -> Result<bool, String> {
 pub async fn update_last_check_time() -> Result<(), String> {
     crate::modules::update_checker::update_last_check_time()
 }
+
+
+/// 检测是否通过 Homebrew Cask 安装
+#[tauri::command]
+pub async fn check_homebrew_installation() -> Result<bool, String> {
+    Ok(crate::modules::update_checker::is_homebrew_installed())
+}
+
+/// 通过 Homebrew Cask 升级应用
+#[tauri::command]
+pub async fn brew_upgrade_cask() -> Result<String, String> {
+    modules::logger::log_info("收到前端触发的 Homebrew 升级请求");
+    crate::modules::update_checker::brew_upgrade_cask().await
+}
+
 
 /// 获取更新设置
 #[tauri::command]

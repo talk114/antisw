@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Network, Activity, BarChart3, Settings, Lock } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, BarChart3, Settings, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useConfigStore } from '../../stores/useConfigStore';
 import { isTauri, isLinux } from '../../utils/env';
@@ -21,7 +21,7 @@ function Navbar() {
     const navItems: NavItem[] = [
         { path: '/', label: t('nav.dashboard'), icon: LayoutDashboard, priority: 'high' },
         { path: '/accounts', label: t('nav.accounts'), icon: Users, priority: 'high' },
-        { path: '/api-proxy', label: t('nav.proxy'), icon: Network, priority: 'high' },
+        // { path: '/api-proxy', label: t('nav.proxy'), icon: Network, priority: 'high' },
         { path: '/monitor', label: t('nav.call_records'), icon: Activity, priority: 'medium' },
         { path: '/token-stats', label: t('nav.token_stats', 'Token 统计'), icon: BarChart3, priority: 'low' },
         { path: '/user-token', label: t('nav.user_token', 'User Tokens'), icon: Users, priority: 'low' },
@@ -109,8 +109,10 @@ function Navbar() {
             <div className="max-w-7xl mx-auto px-8 relative" style={{ zIndex: 10 }}>
                 {/* Flexbox 布局 - 子组件自己处理响应式 */}
                 <div className="flex items-center h-16 gap-4">
-                    {/* Logo - 自己处理响应式 */}
-                    <NavLogo />
+                    {/* Logo - 使用父容器宽度做响应式 */}
+                    <div className="@container/logo basis-[200px] shrink min-w-0">
+                        <NavLogo />
+                    </div>
 
                     {/* 导航菜单 - 自己处理响应式 */}
                     <div className="flex-1 flex justify-center">

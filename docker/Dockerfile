@@ -74,8 +74,8 @@ WORKDIR /app/src-tauri
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/src-tauri/target \
-    cargo build --release --bin antigravity_tools && \
-    cp target/release/antigravity_tools /tmp/antigravity_tools
+    cargo build --release --bin antigravity_sw && \
+    cp target/release/antigravity_sw /tmp/antigravity_sw
 
 # --- Final Runtime Stage ---
 FROM debian:bookworm-slim
@@ -103,7 +103,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
-COPY --from=backend-builder /tmp/antigravity_tools /app/antigravity-tools
+COPY --from=backend-builder /tmp/antigravity_sw /app/antigravity-tools
 
 # Copy frontend dist from builder
 COPY --from=frontend-builder /app/dist /app/dist

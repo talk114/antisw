@@ -4,7 +4,6 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Settings from './pages/Settings';
-import ApiProxy from './pages/ApiProxy';
 import Monitor from './pages/Monitor';
 import TokenStats from './pages/TokenStats';
 import Security from './pages/Security';
@@ -12,14 +11,16 @@ import ThemeManager from './components/common/ThemeManager';
 import UserToken from './pages/UserToken';
 import { UpdateNotification } from './components/UpdateNotification';
 import DebugConsole from './components/debug/DebugConsole';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useConfigStore } from './stores/useConfigStore';
 import { useAccountStore } from './stores/useAccountStore';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from './utils/env';
-import { request as invoke } from './utils/request';
 import { AdminAuthGuard } from './components/common/AdminAuthGuard';
+import { trackEvent, TrackingEvents } from './utils/tracking';
+
+
 
 const router = createBrowserRouter([
   {
@@ -34,10 +35,10 @@ const router = createBrowserRouter([
         path: 'accounts',
         element: <Accounts />,
       },
-      {
-        path: 'api-proxy',
-        element: <ApiProxy />,
-      },
+      // {
+      //   path: 'api-proxy',
+      //   element: <ApiProxy />,
+      // },
       {
         path: 'monitor',
         element: <Monitor />,
@@ -69,6 +70,12 @@ function App() {
 
   useEffect(() => {
     loadConfig();
+
+    // Track app open event
+    trackEvent(TrackingEvents.APP_OPEN, undefined, {
+      screen: 'app',
+      button: null,
+    });
   }, [loadConfig]);
 
   // Sync language from config

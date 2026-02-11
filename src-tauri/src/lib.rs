@@ -384,6 +384,8 @@ pub fn run() {
             commands::get_antigravity_path,
             commands::get_antigravity_args,
             commands::check_for_updates,
+            commands::check_homebrew_installation,
+            commands::brew_upgrade_cask,
             commands::get_update_settings,
             commands::save_update_settings,
             commands::should_check_updates,
@@ -493,6 +495,11 @@ pub fn run() {
             commands::user_token::renew_user_token,
             commands::user_token::get_token_ip_bindings,
             commands::user_token::get_user_token_summary,
+            // Tracking commands
+            commands::tracking::track_event,
+            commands::tracking::get_tracking_device_id,
+            commands::tracking::get_tracking_machine_name,
+            commands::tracking::get_tracking_os,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

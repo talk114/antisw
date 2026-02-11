@@ -43,7 +43,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.localdist.y
 > *   **API Key**：通過 `-e API_KEY=xxx` 設置，用於所有 AI 協議的 API 調用鑒權。
 > *   **Web 管理密碼**：通過 `-e WEB_PASSWORD=xxx` 設置，僅用於 Web UI 登錄。
 > *   **默認行為**：若未設置 `WEB_PASSWORD`，系統會自動回退使用 `API_KEY` 作為登錄密碼。若兩者皆未設置，則生成隨機 Key。
-> *   **查看方式**：執行 `docker logs antigravity-manager` 尋找 `Current API Key` 或 `Web UI Password`，或執行 `grep -E '"api_key"|"admin_password"' ~/.antigravity_tools/gui_config.json` 查看。
+> *   **查看方式**：執行 `docker logs antigravity-manager` 尋找 `Current API Key` 或 `Web UI Password`，或執行 `grep -E '"api_key"|"admin_password"' ~/.antigravity_sw/gui_config.json` 查看。
 
 ```bash
 # 啟動容器 (請替换 your-secret-key 為強密鑰)
@@ -53,7 +53,7 @@ docker run -d \
   -e API_KEY=your-api-key \
   -e WEB_PASSWORD=your-login-password \
   -e ABV_MAX_BODY_SIZE=104857600 \
-  -v ~/.antigravity_tools:/root/.antigravity_tools \
+  -v ~/.antigravity_sw:/root/.antigravity_sw \
   talk114/antisw:latest
 ```
 
@@ -115,7 +115,7 @@ docker build --build-arg USE_MIRROR=true -t antigravity-manager:latest -f docker
 | `ABV_PUBLIC_URL` | - | 用於遠程 OAuth 回調的公網 URL (可選) |
 
 ## 📂 數據持久化
-請務必將宿主機目錄掛載至容器內的 `/root/.antigravity_tools`，否則賬號和配置在容器重啟後會丟失。
+請務必將宿主機目錄掛載至容器內的 `/root/.antigravity_sw`，否則賬號和配置在容器重啟後會丟失。
 
 ## 🌐 訪問位址
 *   **管理界面**: [http://localhost:8045](http://localhost:8045)
@@ -132,7 +132,7 @@ docker push talk114/antisw:latest
 docker push talk114/antisw:4.1.1
 =======
 docker tag antigravity-manager:latest lbjlaq/antigravity-manager:latest
-docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.11
+docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.13
 docker push lbjlaq/antigravity-manager:latest
-docker push lbjlaq/antigravity-manager:4.1.11
+docker push lbjlaq/antigravity-manager:4.1.13
 ```
