@@ -112,7 +112,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         has_update,
         download_url: DOWNLOAD_URL.to_string(),
         version_status,
-        source: Some("Custom Server".to_string()),
+        source: Some("VNP Server".to_string()),
     })
 }
 

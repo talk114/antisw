@@ -28,6 +28,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState>('checking');
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
 
   useEffect(() => {
     checkForUpdates();
@@ -42,11 +43,13 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         // Force update required
         setUpdateInfo(info);
         setUpdateState('force');
+        setShowUpdateNotification(true);
         setTimeout(() => setIsVisible(true), 100);
       } else if (info.version_status === 'UpdateAvailable') {
         // Optional update available
         setUpdateInfo(info);
         setUpdateState('available');
+        setShowUpdateNotification(true);
         setTimeout(() => setIsVisible(true), 100);
       } else {
         // Up to date
@@ -115,7 +118,9 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   if (!updateInfo && updateState !== 'checking') {
     return null;
   }
-
+  if (!showUpdateNotification) {
+    return null;
+  }
   const isForceUpdate = updateState === 'force';
 
   return (
