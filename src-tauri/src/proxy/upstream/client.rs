@@ -276,6 +276,8 @@ impl UpstreamClient {
             let url = Self::build_url(base_url, method, query_string);
             let has_next = idx + 1 < V1_INTERNAL_BASE_URL_FALLBACKS.len();
 
+            crate::modules::logger::log_info(&format!("[API Request] POST {} (Method: {})", url, method));
+
             let response = client
                 .post(&url)
                 .headers(headers.clone())

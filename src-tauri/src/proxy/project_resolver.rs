@@ -13,6 +13,9 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
     });
     
     let client = crate::utils::http::get_client();
+    
+    crate::modules::logger::log_info(&format!("[API Request] POST {} (Method: loadCodeAssist)", url));
+    
     let response = client
         .post(url)
         .bearer_auth(access_token)

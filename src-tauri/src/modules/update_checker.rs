@@ -61,6 +61,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     let client = create_client().await?;
 
     logger::log_info("Checking for updates from custom server...");
+    logger::log_info(&format!("[API Request] GET {}", VERSION_SERVER_URL));
 
     let response = client
         .get(VERSION_SERVER_URL)

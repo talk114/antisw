@@ -568,7 +568,7 @@ pub fn get_model_stats(hours: i64) -> Result<Vec<ModelTokenStats>, String> {
 Google 提供的配额查询接口:
 
 ```rust
-const QUOTA_API_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
+// const QUOTA_API_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
 
 pub async fn fetch_quota(access_token: &str, email: &str) -> Result<(QuotaData, Option<String>), AppError> {
     // 1. 获取 project_id 和订阅等级
@@ -580,34 +580,34 @@ pub async fn fetch_quota(access_token: &str, email: &str) -> Result<(QuotaData, 
         "project": project_id.as_deref().unwrap_or("bamboo-precept-lgxtn")
     });
     
-    let response = client
-        .post(QUOTA_API_URL)
-        .bearer_auth(access_token)
-        .json(&payload)
-        .send()
-        .await?;
+    // let response = client
+    //     .post(QUOTA_API_URL)
+    //     .bearer_auth(access_token)
+    //     .json(&payload)
+    //     .send()
+    //     .await?;
     
     // 3. 解析响应
-    let quota_response: QuotaResponse = response.json().await?;
-    let mut quota_data = QuotaData::new();
+    // let quota_response: QuotaResponse = response.json().await?;
+    // let mut quota_data = QuotaData::new();
     
-    for (name, info) in quota_response.models {
-        if let Some(quota_info) = info.quota_info {
-            let percentage = quota_info.remaining_fraction
-                .map(|f| (f * 100.0) as i32)
-                .unwrap_or(0);
+    // for (name, info) in quota_response.models {
+    //     if let Some(quota_info) = info.quota_info {
+    //         let percentage = quota_info.remaining_fraction
+    //             .map(|f| (f * 100.0) as i32)
+    //             .unwrap_or(0);
             
-            let reset_time = quota_info.reset_time.unwrap_or_default();
+    //         let reset_time = quota_info.reset_time.unwrap_or_default();
             
-            // 只保留关心的模型
-            if name.contains("gemini") || name.contains("claude") {
-                quota_data.add_model(name, percentage, reset_time);
-            }
-        }
-    }
+    //         // 只保留关心的模型
+    //         if name.contains("gemini") || name.contains("claude") {
+    //             quota_data.add_model(name, percentage, reset_time);
+    //         }
+    //     }
+    // }
     
-    quota_data.subscription_tier = subscription_tier;
-    Ok((quota_data, project_id))
+    // quota_data.subscription_tier = subscription_tier;
+    // Ok((quota_data, project_id))
 }
 ```
 

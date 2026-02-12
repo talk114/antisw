@@ -1,5 +1,5 @@
 use crate::modules::tracking;
-use serde_json::json;
+// use serde_json::json;
 
 /// Track an event
 #[tauri::command]

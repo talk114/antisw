@@ -90,6 +90,8 @@ pub async fn exchange_code(code: &str, redirect_uri: &str) -> Result<TokenRespon
         ("grant_type", "authorization_code"),
     ];
 
+    crate::modules::logger::log_info(&format!("[API Request] POST {} (Grant: authorization_code)", TOKEN_URL));
+
     let response = client
         .post(TOKEN_URL)
         .form(&params)
@@ -155,6 +157,8 @@ pub async fn refresh_access_token(refresh_token: &str, account_id: Option<&str>)
         crate::modules::logger::log_info("Refreshing Token for generic request (no account_id)...");
     }
     
+    crate::modules::logger::log_info(&format!("[API Request] POST {} (Grant: refresh_token)", TOKEN_URL));
+    
     let response = client
         .post(TOKEN_URL)
         .form(&params)
@@ -189,6 +193,8 @@ pub async fn get_user_info(access_token: &str, account_id: Option<&str>) -> Resu
     } else {
         crate::utils::http::get_client()
     };
+    
+    crate::modules::logger::log_info(&format!("[API Request] GET {}", USERINFO_URL));
     
     let response = client
         .get(USERINFO_URL)

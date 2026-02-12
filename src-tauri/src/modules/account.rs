@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
-use std::collections::HashSet;
+// use std::collections::HashSet;
 
 use crate::models::{
     Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, QuotaData,
@@ -1190,60 +1190,63 @@ pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), St
     account.update_quota(quota);
 
     // --- Quota protection logic start ---
-    if let Ok(config) = crate::modules::config::load_app_config() {
-        if config.quota_protection.enabled {
-            if let Some(ref q) = account.quota {
-                let threshold = config.quota_protection.threshold_percentage as i32;
+    // [DISABLED] Call quota protection disabled by user request
+    if false {
+        if let Ok(config) = crate::modules::config::load_app_config() {
+            if config.quota_protection.enabled {
+                if let Some(ref q) = account.quota {
+                    let threshold = config.quota_protection.threshold_percentage as i32;
 
-                let mut group_min_percentage: HashMap<String, i32> = HashMap::new();
+                    let mut group_min_percentage: HashMap<String, i32> = HashMap::new();
 
-                for model in &q.models {
-                    if let Some(std_id) =
-                        crate::proxy::common::model_mapping::normalize_to_standard_id(&model.name)
+                    for model in &q.models {
+                        if let Some(std_id) =
+                            crate::proxy::common::model_mapping::normalize_to_standard_id(&model.name)
+                        {
+                            let entry = group_min_percentage.entry(std_id).or_insert(100);
+                            if model.percentage < *entry {
+                                *entry = model.percentage;
+                            }
+                        }
+                    }
+
+                    for std_id in &config.quota_protection.monitored_models {
+                        let min_pct = group_min_percentage.get(std_id).cloned().unwrap_or(100);
+
+                        if min_pct <= threshold {
+                            if !account.protected_models.contains(std_id) {
+                                crate::modules::logger::log_info(&format!(
+                                    "[Quota] Triggering model protection: {} (Group: {} Min: {}% <= Thres: {}%)",
+                                    account.email, std_id, min_pct, threshold
+                                ));
+                                account.protected_models.insert(std_id.clone());
+                            }
+                        } else {
+                            if account.protected_models.contains(std_id) {
+                                crate::modules::logger::log_info(&format!(
+                                    "[Quota] Model protection recovered: {} (Group: {} Min: {}% > Thres: {}%)",
+                                    account.email, std_id, min_pct, threshold
+                                ));
+                                account.protected_models.remove(std_id);
+                            }
+                        }
+                    }
+
+                    // [Compatibility] Migrate from account-level to model-level protection if previously disabled for quota
+                    if account.proxy_disabled
+                        && account
+                            .proxy_disabled_reason
+                            .as_ref()
+                            .map_or(false, |r| r == "quota_protection")
                     {
-                        let entry = group_min_percentage.entry(std_id).or_insert(100);
-                        if model.percentage < *entry {
-                            *entry = model.percentage;
-                        }
+                        crate::modules::logger::log_info(&format!(
+                            "[Quota] Migrating account {} from account-level to model-level protection",
+                            account.email
+                        ));
+                        account.proxy_disabled = false;
+                        account.proxy_disabled_reason = None;
+                        account.proxy_disabled_at = None;
                     }
-                }
-
-                for std_id in &config.quota_protection.monitored_models {
-                    let min_pct = group_min_percentage.get(std_id).cloned().unwrap_or(100);
-
-                    if min_pct <= threshold {
-                        if !account.protected_models.contains(std_id) {
-                            crate::modules::logger::log_info(&format!(
-                                "[Quota] Triggering model protection: {} (Group: {} Min: {}% <= Thres: {}%)",
-                                account.email, std_id, min_pct, threshold
-                            ));
-                            account.protected_models.insert(std_id.clone());
-                        }
-                    } else {
-                        if account.protected_models.contains(std_id) {
-                            crate::modules::logger::log_info(&format!(
-                                "[Quota] Model protection recovered: {} (Group: {} Min: {}% > Thres: {}%)",
-                                account.email, std_id, min_pct, threshold
-                            ));
-                            account.protected_models.remove(std_id);
-                        }
-                    }
-                }
-
-                // [Compatibility] Migrate from account-level to model-level protection if previously disabled for quota
-                if account.proxy_disabled
-                    && account
-                        .proxy_disabled_reason
-                        .as_ref()
-                        .map_or(false, |r| r == "quota_protection")
-                {
-                    crate::modules::logger::log_info(&format!(
-                        "[Quota] Migrating account {} from account-level to model-level protection",
-                        account.email
-                    ));
-                    account.proxy_disabled = false;
-                    account.proxy_disabled_reason = None;
-                    account.proxy_disabled_at = None;
                 }
             }
         }

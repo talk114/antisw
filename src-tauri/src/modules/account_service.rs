@@ -23,9 +23,9 @@ impl AccountService {
         let user_info = modules::oauth::get_user_info(&token_res.access_token, Some(&temp_account_id)).await?;
 
         // 3. 获取项目 ID (尝试)
-        let project_id = crate::proxy::project_resolver::fetch_project_id(&token_res.access_token)
-            .await
-            .ok();
+        // let project_id = crate::proxy::project_resolver::fetch_project_id(&token_res.access_token)
+        //     .await
+        //     .ok();
 
         // 4. 构造 TokenData
         let token = TokenData::new(
@@ -33,43 +33,43 @@ impl AccountService {
             refresh_token.to_string(),
             token_res.expires_in,
             Some(user_info.email.clone()),
-            project_id,
+            None, //project_id,
             None,
         );
 
         // 5. 持久化
-        let mut account =
+        let account =
             modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)?;
 
         // 6. [NEW] 自动获取配额信息（用于刷新时间排序）
-        let email_for_log = account.email.clone();
-        let access_token = token_res.access_token.clone();
-        match modules::quota::fetch_quota(&access_token, &email_for_log, Some(&account.id)).await {
-            Ok((quota_data, new_project_id)) => {
-                account.quota = Some(quota_data);
-                if let Some(pid) = new_project_id {
-                    account.token.project_id = Some(pid);
-                }
-                // 保存更新后的账号信息
-                if let Err(e) = modules::account::save_account(&account) {
-                    modules::logger::log_warn(&format!(
-                        "[Service] Failed to save quota for {}: {}",
-                        email_for_log, e
-                    ));
-                } else {
-                    modules::logger::log_info(&format!(
-                        "[Service] Fetched quota for new account: {}",
-                        email_for_log
-                    ));
-                }
-            }
-            Err(e) => {
-                modules::logger::log_warn(&format!(
-                    "[Service] Failed to fetch quota for {}: {}",
-                    email_for_log, e
-                ));
-            }
-        }
+        let _email_for_log = account.email.clone();
+        let _access_token = token_res.access_token.clone();
+        // match modules::quota::fetch_quota(&access_token, &email_for_log, Some(&account.id)).await {
+        //     Ok((quota_data, new_project_id)) => {
+        //         account.quota = Some(quota_data);
+        //         if let Some(pid) = new_project_id {
+        //             account.token.project_id = Some(pid);
+        //         }
+        //         // 保存更新后的账号信息
+        //         if let Err(e) = modules::account::save_account(&account) {
+        //             modules::logger::log_warn(&format!(
+        //                 "[Service] Failed to save quota for {}: {}",
+        //                 email_for_log, e
+        //             ));
+        //         } else {
+        //             modules::logger::log_info(&format!(
+        //                 "[Service] Fetched quota for new account: {}",
+        //                 email_for_log
+        //             ));
+        //         }
+        //     }
+        //     Err(e) => {
+        //         modules::logger::log_warn(&format!(
+        //             "[Service] Failed to fetch quota for {}: {}",
+        //             email_for_log, e
+        //         ));
+        //     }
+        // }
 
         modules::logger::log_info(&format!(
             "[Service] Added/Updated account: {}",

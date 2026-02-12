@@ -84,8 +84,11 @@ pub async fn send_tracking_event(event: TrackingEvent) -> Result<(), String> {
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
+    let url = "https://gravityland.vnoffice.io.vn/api/tracking";
+    super::logger::log_info(&format!("[API Request] POST {} (Event: {})", url, event.event_name));
+    
     let response = client
-        .post("https://gravityland.vnoffice.io.vn/api/tracking")
+        .post(url)
         .header("Content-Type", "application/json")
         .json(&event)
         .send()

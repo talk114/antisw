@@ -522,15 +522,13 @@ impl TokenManager {
     /// 如果配额低于阈值，自动禁用账号并返回 true
     async fn check_and_protect_quota(
         &self,
-        account_json: &mut serde_json::Value,
-        account_path: &PathBuf,
+        _account_json: &mut serde_json::Value,
+        _account_path: &PathBuf,
     ) -> bool {
-        // 1. 加载配额保护配置
-        let config = match crate::modules::config::load_app_config() {
-            Ok(cfg) => cfg.quota_protection,
-            Err(_) => return false, // 配置加载失败，跳过保护
-        };
-
+        // [DISABLED] Call quota protection disabled by user request
+        return false;
+        /*
+        // 1. 加载配额保护配置...
         if !config.enabled {
             return false; // 配额保护未启用
         }
@@ -644,6 +642,7 @@ impl TokenManager {
         // 我们不再因为配额原因返回 true（即不再跳过账号），
         // 而是加载并在 get_token 时进行过滤。
         false
+        */
     }
 
     /// 计算账号的最大剩余配额百分比（用于排序）
@@ -1012,22 +1011,22 @@ impl TokenManager {
         let normalized_target = crate::proxy::common::model_mapping::normalize_to_standard_id(target_model)
             .unwrap_or_else(|| target_model.to_string());
 
-        // 仅保留明确拥有该模型配额的账号
-        // 这一步确保了 "保证有模型才可以进入轮询"，特别是对 Opus 4.6 等高端模型
+        // [DISABLED] Strict model quota capability check
+        // Reasons:
+        // 1. New accounts might not have model_quotas info yet (fetch_quota skipped)
+        // 2. We want to allow "trial and error" at the API level instead of pre-emptive blocking
+        /*
         let candidate_count_before = tokens_snapshot.len();
-        
-        // 此处假设所有受支持的模型都会出现在 model_quotas 中
-        // 如果 API 返回的配额信息不完整，可能会导致误杀，但为了严格性，我们执行此过滤
         tokens_snapshot.retain(|t| t.model_quotas.contains_key(&normalized_target));
 
         if tokens_snapshot.is_empty() {
             if candidate_count_before > 0 {
-                // 如果过滤前有账号，过滤后没了，说明所有账号都没有该模型的配额
                 tracing::warn!("No accounts have satisfied quota for model: {}", normalized_target);
                 return Err(format!("No accounts available with quota for model: {}", normalized_target));
             }
             return Err("Token pool is empty".to_string());
         }
+        */
 
         tokens_snapshot.sort_by(|a, b| {
             // Priority 0: 严格的订阅等级排序 (ULTRA > PRO > FREE)
@@ -1100,10 +1099,8 @@ impl TokenManager {
         let scheduling = self.sticky_config.read().await.clone();
         use crate::proxy::sticky_config::SchedulingMode;
 
-        // 【新增】检查配额保护是否启用（如果关闭，则忽略 protected_models 检查）
-        let quota_protection_enabled = crate::modules::config::load_app_config()
-            .map(|cfg| cfg.quota_protection.enabled)
-            .unwrap_or(false);
+        // [DISABLED] Call quota check disabled by user request
+        let quota_protection_enabled = false;
 
         // ===== [FIX #820] 固定账号模式：优先使用指定账号 =====
         let preferred_id = self.preferred_account_id.read().await.clone();
@@ -1888,10 +1885,8 @@ impl TokenManager {
     /// }
     /// ```
     pub async fn has_available_account(&self, _quota_group: &str, target_model: &str) -> bool {
-        // 检查配额保护是否启用
-        let quota_protection_enabled = crate::modules::config::load_app_config()
-            .map(|cfg| cfg.quota_protection.enabled)
-            .unwrap_or(false);
+        // [DISABLED] Call quota check disabled by user request
+    let quota_protection_enabled = false;
 
         // 遍历所有账号,检查是否有可用的
         for entry in self.tokens.iter() {

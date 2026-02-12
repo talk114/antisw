@@ -164,25 +164,26 @@ pub async fn export_accounts(account_ids: Vec<String>) -> Result<AccountExportRe
 
 /// 内部辅助功能：在添加或导入账号后自动刷新一次额度
 async fn internal_refresh_account_quota(
-    app: &tauri::AppHandle,
-    account: &mut Account,
+    _app: &tauri::AppHandle,
+    _account: &mut Account,
 ) -> Result<QuotaData, String> {
-    modules::logger::log_info(&format!("自动触发刷新配额: {}", account.email));
+    // modules::logger::log_info(&format!("自动触发刷新配额: {}", account.email));
 
     // 使用带重试的查询 (Shared logic)
-    match modules::account::fetch_quota_with_retry(account).await {
-        Ok(quota) => {
-            // 更新账号配额
-            let _ = modules::update_account_quota(&account.id, quota.clone());
-            // 更新托盘菜单
-            crate::modules::tray::update_tray_menus(app);
-            Ok(quota)
-        }
-        Err(e) => {
-            modules::logger::log_warn(&format!("自动刷新配额失败 ({}): {}", account.email, e));
-            Err(e.to_string())
-        }
-    }
+    // match modules::account::fetch_quota_with_retry(account).await {
+    //     Ok(quota) => {
+    //         // 更新账号配额
+    //         let _ = modules::update_account_quota(&account.id, quota.clone());
+    //         // 更新托盘菜单
+    //         crate::modules::tray::update_tray_menus(app);
+    //         Ok(quota)
+    //     }
+    //     Err(e) => {
+    //         modules::logger::log_warn(&format!("自动刷新配额失败 ({}): {}", account.email, e));
+    //         Err(e.to_string())
+    //     }
+    // }
+    Err("Quota fetch failed".to_string())
 }
 
 /// 查询账号配额
