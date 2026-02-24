@@ -110,7 +110,8 @@
         }
     },
     "accounts": {
-        "search_placeholder": "Pesquisar email...",
+        "account": "Conta",
+        "search_placeholder": "Pesquisar e-mail...",
         "all": "Todas",
         "available": "Disponíveis",
         "low_quota": "Cota Baixa",
@@ -140,8 +141,18 @@
         "forbidden": "403",
         "forbidden_badge": "403",
         "forbidden_tooltip": "API retornou 403 Forbidden, conta não tem permissão para Gemini Code Assist",
-        "forbidden_msg": "Proibido, pular atualização automática",
-        "no_data": "Sem Dados",
+        "forbidden_msg": "Proibido, ignorar atualização automática",
+        "status": {
+            "forbidden": "403 Proibido",
+            "disabled": "Conta desativada",
+            "proxy_disabled": "Proxy desativado"
+        },
+        "error_details": "Detalhes do erro",
+        "error_status": "Status do erro",
+        "error_time": "Hora de detecção",
+        "view_error": "Ver motivo",
+        "click_to_verify": "Clique para verificar",
+        "no_data": "Nenhum dado",
         "last_used": "Último Uso",
         "reset_time": "Tempo de Reset",
         "switch_to": "Alternar para esta conta",
@@ -810,18 +821,9 @@
             "restore_defaults": "Restaurar Configuração Padrão",
             "reset_all": "Redefinir Tudo"
         },
-        "models": {
-            "flash": "Ultra-rápido",
-            "flash_thinking": "Capacidade de Pensamento",
-            "pro_high": "Melhor Raciocínio",
-            "pro_low": "Cota Baixa",
-            "sonnet": "Raciocínio de Código",
-            "sonnet_thinking": "Cadeia de Pensamento",
-            "opus_thinking": "Pensamento Mais Forte"
-        },
         "router": {
             "title": "Roteador de Modelos",
-            "subtitle": "Rotear modelos por série ou adicionar mapeamentos exatos personalizados.\nNota: Modelos de passagem nativa Claude (ex: claude-opus-4-5-thinking) ignoram grupos de série por padrão. Use \"Roteamento Personalizado Especialista\" para substituir.",
+            "subtitle": "Rotear modelos por série ou adicionar mapeamentos exatos personalizados.\nNota: Modelos de passagem nativa Claude (ex: claude-opus-4-6-thinking) ignoram grupos de série por padrão. Use \"Roteamento Personalizado Especialista\" para substituir.",
             "subtitle_simple": "Personalizar roteamento de modelos com curingas ou mapeamentos exatos",
             "background_task_title": "Modelo de Tarefa em Segundo Plano",
             "background_task_desc": "Modelo usado para tarefas em segundo plano do Claude CLI, como geração de título, resumo, etc. (Padrão: gemini-2.5-flash)",
@@ -831,14 +833,10 @@
             "presets_applied": "Predefinições aplicadas com sucesso",
             "custom_mappings": "Mapeamentos Personalizados",
             "group_title": "Grupos de Séries",
-            "gemini3_group_label": "Gemini 3 (Recomendado)",
-            "gemini3_option_high": "gemini-3-pro-high (Alta Qualidade)",
-            "gemini3_option_low": "gemini-3-pro-low (Equilibrado)",
-            "gemini3_option_flash": "gemini-3-flash (Rápido)",
             "groups": {
                 "claude_45": {
                     "name": "Série Claude 4.6 TK",
-                    "desc": "Opus 4.6 TK"
+                    "desc": "Opus 4.5 TK"
                 },
                 "claude_35": {
                     "name": "Série Claude 3.5",

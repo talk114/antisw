@@ -1,10 +1,10 @@
-use reqwest;
+use rquest;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use crate::models::QuotaData;
 use crate::modules::config;
 
-const QUOTA_API_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
+const QUOTA_API_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
 
 /// Critical retry threshold: considered near recovery when quota reaches 95%
 const NEAR_READY_THRESHOLD: i32 = 95;
@@ -53,7 +53,7 @@ struct Tier {
 }
 
 /// Get shared HTTP Client (15s timeout)
-async fn create_client(account_id: Option<&str>) -> reqwest::Client {
+async fn create_client(account_id: Option<&str>) -> rquest::Client {
     if let Some(pool) = crate::proxy::proxy_pool::get_global_proxy_pool() {
         pool.get_effective_client(account_id, 15).await
     } else {
@@ -63,7 +63,7 @@ async fn create_client(account_id: Option<&str>) -> reqwest::Client {
 
 /// Get shared HTTP Client (60s timeout)
 #[allow(dead_code)] // 预留给预热/后台任务调用
-async fn create_warmup_client(account_id: Option<&str>) -> reqwest::Client {
+async fn create_warmup_client(account_id: Option<&str>) -> rquest::Client {
     if let Some(pool) = crate::proxy::proxy_pool::get_global_proxy_pool() {
         pool.get_effective_client(account_id, 60).await
     } else {
@@ -80,9 +80,9 @@ async fn fetch_project_id(access_token: &str, email: &str, account_id: Option<&s
 
     let res = client
         .post(format!("{}/v1internal:loadCodeAssist", CLOUD_CODE_BASE_URL))
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", access_token))
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
+        .header(rquest::header::AUTHORIZATION, format!("Bearer {}", access_token))
+        .header(rquest::header::CONTENT_TYPE, "application/json")
+        .header(rquest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
         .json(&meta)
         .send()
         .await;
@@ -155,7 +155,7 @@ pub async fn fetch_quota_with_cache(
         match client
             .post(url)
             .bearer_auth(access_token)
-            .header(reqwest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
+            .header(rquest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
             .json(&json!(payload))
             .send()
             .await
@@ -166,7 +166,7 @@ pub async fn fetch_quota_with_cache(
                     let status = response.status();
                     
                     // ✅ Special handling for 403 Forbidden - return directly, no retry
-                    if status == reqwest::StatusCode::FORBIDDEN {
+                    if status == rquest::StatusCode::FORBIDDEN {
                         crate::modules::logger::log_warn(&format!(
                             "Account unauthorized (403 Forbidden), marking as forbidden"
                         ));
@@ -192,7 +192,7 @@ pub async fn fetch_quota_with_cache(
                 let quota_response: QuotaResponse = response
                     .json()
                     .await
-                    .map_err(|e| AppError::Network(e))?;
+                    .map_err(AppError::from)?;
                 
                 let mut quota_data = QuotaData::new();
                 
@@ -208,7 +208,7 @@ pub async fn fetch_quota_with_cache(
                         let reset_time = quota_info.reset_time.clone().unwrap_or_default();
                         
                         // Only keep models we care about
-                        if name.contains("gemini") || name.contains("claude") {
+                        if name.contains("gemini") || name.contains("claude") || name.contains("image") || name.contains("imagen") {
                             quota_data.add_model(name, percentage, reset_time);
                         }
                     }
@@ -221,7 +221,7 @@ pub async fn fetch_quota_with_cache(
             },
             Err(e) => {
                 crate::modules::logger::log_warn(&format!("Request failed: {} (Attempt {}/{})", e, attempt, MAX_RETRIES));
-                last_error = Some(AppError::Network(e));
+                last_error = Some(AppError::from(e));
                 if attempt < MAX_RETRIES {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
@@ -297,11 +297,11 @@ pub async fn warmup_model_directly(
 
     // Use a no-proxy client for local loopback requests
     // This prevents Docker environments from routing localhost through external proxies
-    let client = reqwest::Client::builder()
+    let client = rquest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .no_proxy()
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+        .unwrap_or_else(|_| rquest::Client::new());
     let resp = client
         .post(&warmup_url)
         .header("Content-Type", "application/json")
@@ -368,6 +368,15 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
 
             for handle in handles {
                 if let Ok(Some((id, email, token, pid, Some((fresh_quota, _))))) = handle.await {
+                    // [FIX] 预热阶段检测到 403 时，持久化 is_forbidden 标记，避免无效账号继续参与轮询
+                    if fresh_quota.is_forbidden {
+                        crate::modules::logger::log_warn(&format!(
+                            "[Warmup] Account {} returned 403 Forbidden during quota fetch, persisting forbidden status",
+                            email
+                        ));
+                        let _ = crate::modules::account::update_account_quota(&id, fresh_quota);
+                        continue;
+                    }
                     let mut account_warmed_series = std::collections::HashSet::new();
                     for m in fresh_quota.models {
                         if m.percentage >= 100 {
@@ -487,6 +496,16 @@ pub async fn warm_up_account(account_id: &str) -> Result<String, String> {
     let (token, pid) = get_valid_token_for_warmup(&account_owned).await?;
     let (fresh_quota, _) = fetch_quota_with_cache(&token, &email, Some(&pid), Some(&account_owned.id)).await.map_err(|e| format!("Failed to fetch quota: {}", e))?;
     
+    // [FIX] 预热阶段检测到 403 时，持久化 is_forbidden 标记，避免无效账号继续参与轮询
+    if fresh_quota.is_forbidden {
+        crate::modules::logger::log_warn(&format!(
+            "[Warmup] Account {} returned 403 Forbidden during quota fetch, persisting forbidden status",
+            email
+        ));
+        let _ = crate::modules::account::update_account_quota(account_id, fresh_quota);
+        return Err("Account is forbidden (403)".to_string());
+    }
+
     let mut models_to_warm = Vec::new();
     let mut warmed_series = std::collections::HashSet::new();
 

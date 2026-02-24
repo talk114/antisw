@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, ToggleLeft, ToggleRight, Fingerprint, Sparkles, Tag, X, Check } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, ToggleLeft, ToggleRight, Fingerprint, Sparkles, Tag, X, Check, Clock } from 'lucide-react';
 import { Account } from '../../types/account';
 import { cn } from '../../utils/cn';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +23,7 @@ interface AccountCardProps {
     onToggleProxy: () => void;
     onWarmup?: () => void;
     onUpdateLabel?: (label: string) => void;
+    onViewError: () => void;
 }
 
 // 使用统一的模型配置
@@ -33,7 +34,7 @@ const DEFAULT_MODELS = Object.entries(MODEL_CONFIG).map(([id, config]) => ({
     Icon: config.Icon
 }));
 
-function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice, onWarmup, onUpdateLabel }: AccountCardProps) {
+function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice, onWarmup, onUpdateLabel, onViewError }: AccountCardProps) {
     const { t } = useTranslation();
     const { config, showAllQuotas } = useConfigStore();
     const isDisabled = Boolean(account.disabled);
@@ -99,8 +100,8 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
             }
         }
 
-        // 应用排序
-        return sortModels(models);
+        // 应用排序并过滤过期模型
+        return sortModels(models).filter(m => m.id !== 'claude-sonnet-4-6-thinking' && m.id !== 'claude-sonnet-4-5-thinking' && m.id !== 'claude-opus-4-5-thinking');
     }, [config, account, showAllQuotas]);
 
     const isModelProtected = (key?: string) => {
@@ -143,7 +144,6 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
                             {isDisabled && (
                                 <span
                                     className="px-1.5 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-rose-200/50"
-                                    title={account.disabled_reason || t('accounts.disabled_tooltip')}
                                 >
                                     <Ban className="w-2.5 h-2.5" />
                                     {t('accounts.disabled').toUpperCase()}
@@ -152,16 +152,21 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
                             {account.proxy_disabled && (
                                 <span
                                     className="px-1.5 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-orange-200/50"
-                                    title={account.proxy_disabled_reason || t('accounts.proxy_disabled_tooltip')}
                                 >
                                     <Ban className="w-2.5 h-2.5" />
                                     {t('accounts.proxy_disabled').toUpperCase()}
                                 </span>
                             )}
                             {account.quota?.is_forbidden && (
-                                <span className="px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-red-200/50" title={t('accounts.forbidden_tooltip')}>
+                                <span className="px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-red-200/50">
                                     <Lock className="w-2.5 h-2.5" />
                                     {t('accounts.forbidden').toUpperCase()}
+                                </span>
+                            )}
+                            {account.validation_blocked && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-amber-200/50">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    {t('accounts.status.validation_required').toUpperCase()}
                                 </span>
                             )}
                             {/* 订阅类型徽章 */}
@@ -205,12 +210,30 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
                 </div>
             </div>
 
+
             {/* 配额展示 */}
             <div className="flex-1 px-2 mb-2 overflow-y-auto scrollbar-none">
-                {account.quota?.is_forbidden ? (
-                    <div className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50/50 dark:bg-red-900/10 p-2 rounded-lg border border-red-100 dark:border-red-900/30">
-                        <Ban className="w-4 h-4 shrink-0" />
-                        <span>{t('accounts.forbidden_msg')}</span>
+                {isDisabled || account.quota?.is_forbidden || account.proxy_disabled || account.validation_blocked ? (
+                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 h-full py-4 text-center">
+                        <div className={cn(
+                            "flex items-center gap-1.5",
+                            account.validation_blocked ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
+                        )}>
+                            {account.validation_blocked ? <Clock className="w-4 h-4" /> : (isDisabled || account.proxy_disabled ? <Ban className="w-4 h-4" /> : <Lock className="w-4 h-4" />)}
+                            <span className="text-[11px] font-bold">
+                                {account.validation_blocked ? t('accounts.status.validation_required') : (isDisabled ? t('accounts.status.disabled') : account.proxy_disabled ? t('accounts.status.proxy_disabled') : t('accounts.forbidden_msg'))}
+                            </span>
+                        </div>
+                        <div className={cn(
+                            "w-px h-3 hidden sm:block",
+                            account.validation_blocked ? "bg-amber-200 dark:bg-amber-800/50" : "bg-red-200 dark:bg-red-800/50"
+                        )} />
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onViewError(); }}
+                            className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        >
+                            {t('accounts.view_error')}
+                        </button>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-2 content-start">

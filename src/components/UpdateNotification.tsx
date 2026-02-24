@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Download, Sparkles, ArrowRight, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { X, Download, Sparkles, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import { request as invoke } from '../utils/request';
 import { useTranslation } from 'react-i18next';
 import { check as tauriCheck } from '@tauri-apps/plugin-updater';
@@ -31,11 +31,12 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
 
   useEffect(() => {
-    checkForUpdates();
+    checkAndDownload();
   }, []);
 
-  const checkForUpdates = async () => {
+  const checkAndDownload = async () => {
     try {
+      // 1. Check for updates via backend
       const info = await invoke<UpdateInfo>('check_for_updates');
       console.log('Update info:', info);
 
@@ -201,6 +202,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
             )}
           </div>
 
+          {/* Status message */}
           <div className="mb-4">
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
               {updateState === 'downloading' && t('update_notification.downloading')}
@@ -236,15 +238,22 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all duration-300" />
                 <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent z-20 pointer-events-none" />
               </button>
+              <button
+                onClick={handleClose}
+                className="
+                  px-3 py-2.5 rounded-xl
+                  text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200
+                  hover:bg-black/5 dark:hover:bg-white/10
+                  transition-all duration-200
+                  text-sm font-medium
+                "
+              >
+                {t('update_notification.btn_later')}
+              </button>
             </div>
           )}
 
-          {(updateState === 'downloading' || updateState === 'ready') && (
-            <div className="flex items-center justify-center gap-2 text-blue-600 dark:text-blue-400">
-              {updateState === 'downloading' && <Loader2 className="w-4 h-4 animate-spin" />}
-              {updateState === 'ready' && <CheckCircle className="w-4 h-4" />}
-            </div>
-          )}
+
         </div>
       </div>
     </div>

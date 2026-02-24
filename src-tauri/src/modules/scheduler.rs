@@ -66,7 +66,7 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
                 continue;
             };
 
-            if !app_config.scheduled_warmup.enabled {
+            if !app_config.auto_refresh {
                 continue;
             }
             
@@ -103,6 +103,16 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
                 let Ok((fresh_quota, _)) = quota::fetch_quota_with_cache(&token, &account.email, Some(&pid), Some(&account.id)).await else {
                     continue;
                 };
+
+                // [FIX] 预热阶段检测到 403 时，持久化 is_forbidden 标记，避免无效账号继续参与轮询
+                if fresh_quota.is_forbidden {
+                    logger::log_warn(&format!(
+                        "[Scheduler] Account {} returned 403 Forbidden during quota fetch, persisting forbidden status",
+                        account.email
+                    ));
+                    let _ = account::update_account_quota(&account.id, fresh_quota);
+                    continue;
+                }
 
                 let now_ts = Utc::now().timestamp();
 
@@ -279,6 +289,16 @@ pub async fn trigger_warmup_for_account(account: &Account) {
     let Ok((fresh_quota, _)) = quota::fetch_quota_with_cache(&token, &account.email, Some(&pid), Some(&account.id)).await else {
         return;
     };
+
+    // [FIX] 预热阶段检测到 403 时，持久化 is_forbidden 标记，避免无效账号继续参与轮询
+    if fresh_quota.is_forbidden {
+        logger::log_warn(&format!(
+            "[Scheduler] Account {} returned 403 Forbidden during quota fetch, persisting forbidden status",
+            account.email
+        ));
+        let _ = account::update_account_quota(&account.id, fresh_quota);
+        return;
+    }
 
     // Load config once at the beginning
     let Ok(app_config) = config::load_app_config() else {

@@ -123,6 +123,7 @@ pub async fn handle_generate(
             &tools_val,
             None,        // size (not applicable for Gemini native protocol)
             None,        // quality
+            None,        // [NEW] image_size
             Some(&body), // [NEW] Pass request body for imageConfig parsing
         );
 
@@ -272,7 +273,7 @@ pub async fn handle_generate(
                     "status": status.as_u16(),
                     "upstream_url": upstream_url,
                 });
-                let mut response_stream = debug_logger::wrap_reqwest_stream_with_debug(
+                let mut response_stream = debug_logger::wrap_stream_with_debug(
                     Box::pin(response.bytes_stream()),
                     debug_cfg.clone(),
                     trace_id.clone(),

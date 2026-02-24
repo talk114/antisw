@@ -13,7 +13,8 @@ import {
     RotateCcw,
     Copy,
     X,
-    Bot
+    Bot,
+    Trash2
 } from 'lucide-react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { request as invoke } from '../../utils/request';
@@ -84,6 +85,7 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
     const [restoreConfirmApp, setRestoreConfirmApp] = useState<CliAppType | null>(null);
     const [syncConfirmApp, setSyncConfirmApp] = useState<CliAppType | null>(null);
     const [openCodeSyncModal, setOpenCodeSyncModal] = useState(false);
+    const [clearConfirmApp, setClearConfirmApp] = useState<CliAppType | null>(null);
 
     const { models: proxyModels } = useProxyModels();
 
@@ -193,6 +195,28 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
         }
     };
 
+    const handleClear = (app: CliAppType) => {
+        setClearConfirmApp(app);
+    };
+
+    const executeClear = async () => {
+        if (!clearConfirmApp) return;
+        const app = clearConfirmApp;
+        setClearConfirmApp(null);
+
+        setSyncing(prev => ({ ...prev, [app]: true }));
+        try {
+            const formattedUrl = getFormattedProxyUrl(app);
+            await invoke('execute_opencode_clear', { proxyUrl: formattedUrl, clearLegacy: true });
+            showToast(t('proxy.opencode_sync.toast.clear_success', { defaultValue: 'OpenCode cleared successfully' }), 'success');
+            await checkStatus(app);
+        } catch (error: any) {
+            showToast(t('proxy.opencode_sync.toast.clear_error', { defaultValue: `Clear failed: ${error.toString()}` }), 'error');
+        } finally {
+            setSyncing(prev => ({ ...prev, [app]: false }));
+        }
+    };
+
     const handleViewConfig = async (app: CliAppType, fileName?: string) => {
         try {
             const status = statuses[app];
@@ -267,7 +291,8 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                         </div>
                     </div>
 
-                    {!isAppLoading && status?.installed && (
+                    {/* Show Sync Status if installed OR if it's OpenCode (which we now allow configuring even if not installed) */}
+                    {!isAppLoading && (status?.installed || app === 'OpenCode' && status?.current_base_url) && (
                         <div className={cn(
                             "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold tracking-wide transition-all h-6 shrink-0 whitespace-nowrap shadow-sm",
                             status.is_synced
@@ -294,7 +319,7 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                     </div>
 
                     {/* Claude, Codex, Gemini 的模型选择 */}
-                    {status?.installed && (app === 'Claude' || app === 'Codex' || app === 'Gemini') && (
+                    {(status?.installed || app === 'OpenCode') && (app === 'Claude' || app === 'Codex' || app === 'Gemini') && (
                         <div className="space-y-1">
                             <div className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider px-1">
                                 {t('proxy.cli_sync.model_select', { defaultValue: 'Select Model' })}
@@ -309,8 +334,8 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                         </div>
                     )}
 
-                    {/* OpenCode 独有的账号同步选项 */}
-                    {app === 'OpenCode' && status?.installed && (
+                    {/* OpenCode 独有的账号同步选项 - Allow even if not installed */}
+                    {app === 'OpenCode' && (
                         <div className="flex items-center gap-2 p-2 bg-gray-50/50 dark:bg-gray-900/20 rounded-lg">
                             <input
                                 type="checkbox"
@@ -326,7 +351,7 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                     )}
 
                     <div className="flex items-center gap-2">
-                        {status?.installed && (
+                        {(status?.installed || app === 'OpenCode') && (
                             <>
                                 {/* 对于 OpenCode，如果未同步，则不显示查看按钮（因为文件尚未生成，后端会报错） */}
                                 {(app !== 'OpenCode' || status?.is_synced) && (
@@ -345,11 +370,21 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                                 >
                                     <RotateCcw size={14} />
                                 </button>
+                                {/* OpenCode 独有的 Clear 按钮 */}
+                                {app === 'OpenCode' && (
+                                    <button
+                                        onClick={() => handleClear(app)}
+                                        className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                        title={t('proxy.opencode_sync.btn_clear', { defaultValue: 'Clear' })}
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
                             </>
                         )}
                         <button
                             onClick={() => handleSync(app)}
-                            disabled={!status?.installed || isAppSyncing || isAppLoading}
+                            disabled={(app !== 'OpenCode' && !status?.installed) || isAppSyncing || isAppLoading}
                             className={cn(
                                 "btn btn-sm flex-1 gap-2 rounded-xl transition-all font-bold shadow-sm",
                                 status?.is_synced
@@ -472,6 +507,16 @@ export const CliSyncCard = ({ proxyUrl, apiKey, className }: CliSyncCardProps) =
                 message={syncConfirmApp ? t('proxy.cli_sync.sync_confirm_message', { name: syncConfirmApp }) : ''}
                 onConfirm={executeSync}
                 onCancel={() => setSyncConfirmApp(null)}
+                isDestructive={true}
+            />
+
+            {/* Clear 确认弹窗 - 仅 OpenCode */}
+            <ModalDialog
+                isOpen={!!clearConfirmApp}
+                title={t('proxy.opencode_sync.clear_confirm_title', { defaultValue: 'Clear OpenCode Configuration' })}
+                message={t('proxy.opencode_sync.clear_confirm_message', { defaultValue: 'This will clear all OpenCode configurations including legacy settings. Are you sure?' })}
+                onConfirm={executeClear}
+                onCancel={() => setClearConfirmApp(null)}
                 isDestructive={true}
             />
 

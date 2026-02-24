@@ -110,6 +110,7 @@
         }
     },
     "accounts": {
+        "account": "Hesap",
         "search_placeholder": "E-posta ara...",
         "all": "Tümü",
         "available": "Kullanılabilir",
@@ -141,6 +142,16 @@
         "forbidden_badge": "403",
         "forbidden_tooltip": "API 403 Forbidden döndürdü, hesap Gemini Code Assist için izne sahip değil",
         "forbidden_msg": "Yasaklı, otomatik yenileme atlandı",
+        "status": {
+            "forbidden": "403 Yasaklandı",
+            "disabled": "Hesap Devre Dışı",
+            "proxy_disabled": "Proxy Devre Dışı"
+        },
+        "error_details": "Hata Detayları",
+        "error_status": "Hata Durumu",
+        "error_time": "Tespit Süresi",
+        "view_error": "Nedeni Görüntüle",
+        "click_to_verify": "Doğrulamak için tıklayın",
         "no_data": "Veri Yok",
         "last_used": "Son Kullanım",
         "reset_time": "Sıfırlama Zamanı",
@@ -786,18 +797,9 @@
             "restore_defaults": "Varsayılan Yapılandırmayı Geri Yükle",
             "reset_all": "Tümünü Sıfırla"
         },
-        "models": {
-            "flash": "Ultra-hızlı",
-            "flash_thinking": "Düşünme Yeteneği",
-            "pro_high": "En İyi Akıl Yürütme",
-            "pro_low": "Düşük Kota",
-            "sonnet": "Kod Akıl Yürütme",
-            "sonnet_thinking": "Düşünce Zinciri",
-            "opus_thinking": "En Güçlü Düşünme"
-        },
         "router": {
             "title": "Model Yönlendirici",
-            "subtitle": "Modelleri serilere göre yönlendirin veya özel tam eşlemeler ekleyin.\nNot: Yerel Claude geçiş modelleri (örn. claude-opus-4-5-thinking) varsayılan olarak seri gruplarını atlar. Geçersiz kılmak için \"Uzman Özel Yönlendirme\" kullanın.",
+            "subtitle": "Modelleri serilere göre yönlendirin veya özel tam eşlemeler ekleyin.\nNot: Yerel Claude geçiş modelleri (örn. claude-opus-4-6-thinking) varsayılan olarak seri gruplarını atlar. Geçersiz kılmak için \"Uzman Özel Yönlendirme\" kullanın.",
             "subtitle_simple": "Joker karakterlerle veya tam eşlemelerle model yönlendirmeyi özelleştirin",
             "background_task_title": "Arka Plan Görev Modeli",
             "background_task_desc": "Başlık oluşturma, özetleme vb. Claude CLI arka plan görevleri için kullanılan model (Varsayılan: gemini-2.5-flash)",
@@ -807,14 +809,10 @@
             "presets_applied": "Ön ayarlar başarıyla uygulandı",
             "custom_mappings": "Özel Eşlemeler",
             "group_title": "Seri Grupları",
-            "gemini3_group_label": "Gemini 3 (Önerilen)",
-            "gemini3_option_high": "gemini-3-pro-high (Yüksek Kalite)",
-            "gemini3_option_low": "gemini-3-pro-low (Dengeli)",
-            "gemini3_option_flash": "gemini-3-flash (Hızlı)",
             "groups": {
                 "claude_45": {
                     "name": "Claude 4.6 TK Serisi",
-                    "desc": "Opus 4.6 TK"
+                    "desc": "Opus 4.5 TK"
                 },
                 "claude_35": {
                     "name": "Claude 3.5 Serisi",

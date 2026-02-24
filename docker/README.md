@@ -132,7 +132,7 @@ docker push talk114/antisw:latest
 docker push talk114/antisw:4.1.1
 =======
 docker tag antigravity-manager:latest lbjlaq/antigravity-manager:latest
-docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.13
+docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.20
 docker push lbjlaq/antigravity-manager:latest
-docker push lbjlaq/antigravity-manager:4.1.13
+docker push lbjlaq/antigravity-manager:4.1.20
 ```

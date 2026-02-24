@@ -23,9 +23,10 @@ pub fn transform_openai_request(
         &request.model,
         &mapped_model_lower,
         &tools_val,
-        request.size.as_deref(),    // [NEW] Pass size parameter
-        request.quality.as_deref(), // [NEW] Pass quality parameter
-        None,  // OpenAI uses size/quality params, not body.imageConfig
+        request.size.as_deref(),       // [NEW] Pass size parameter
+        request.quality.as_deref(),    // [NEW] Pass quality parameter
+        request.image_size.as_deref(), // [FIX] Pass imageSize parameter
+        None,  // body
     );
 
     // [FIX] 仅当模型名称显式包含 "-thinking" 时才视为 Gemini 思维模型
@@ -37,6 +38,7 @@ pub fn transform_openai_request(
             mapped_model_lower.contains("-thinking")
                 || mapped_model_lower.contains("gemini-2.0-pro")
                 || mapped_model_lower.contains("gemini-3-pro")
+                || mapped_model_lower.contains("gemini-3.1-pro")
         )
         && !mapped_model_lower.contains("claude");
     let is_claude_thinking = mapped_model_lower.ends_with("-thinking");
@@ -198,7 +200,7 @@ pub fn transform_openai_request(
                     parts.push(thought_part);
                 }
             } else if actual_include_thinking && role == "model" {
-                // [FIX] 解决 Claude 3.7 Thinking 模型的强制性校验:
+                // [FIX] 解决 Claude 4.6 Thinking 模型的强制性校验:
                 // "Expected thinking... but found tool_use/text"
                 // 如果是思维模型且缺失 reasoning_content, 则注入占位符
                 tracing::debug!("[OpenAI-Thinking] Injecting placeholder thinking block for assistant message");
@@ -402,7 +404,7 @@ pub fn transform_openai_request(
         "topP": request.top_p.unwrap_or(0.95), // Gemini default is usually 0.95
     });
 
-    // [FIX] 移除默认的 81920 maxOutputTokens，防止非思维模型 (如 claude-sonnet-4-5) 报 400 Invalid Argument
+    // [FIX] 移除默认的 81920 maxOutputTokens，防止非思维模型 (如 claude-sonnet-4-6) 报 400 Invalid Argument
     // 仅在用户显式提供时设置
     if let Some(max_tokens) = request.max_tokens {
          gen_config["maxOutputTokens"] = json!(max_tokens);
@@ -478,6 +480,10 @@ pub fn transform_openai_request(
                         user_budget
                     }
                 }
+                crate::proxy::config::ThinkingBudgetMode::Adaptive => {
+                    // Adaptive 模式暂时使用默认值,实际的 adaptive 逻辑在后续处理
+                    user_budget
+                }
             };
 
             gen_config["thinkingConfig"] = json!({
@@ -539,7 +545,7 @@ pub fn transform_openai_request(
     });
 
     // 深度清理 [undefined] 字符串 (Cherry Studio 等客户端常见注入)
-    crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request);
+    crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request, 0);
 
     // 4. Handle Tools (Merged Cleaning)
     if let Some(tools) = &request.tools {
@@ -561,7 +567,10 @@ pub fn transform_openai_request(
 
             if let Some(name) = &name_opt {
                 // 跳过内置联网工具名称，避免重复定义
-                if name == "web_search" || name == "google_search" || name == "web_search_20250305"
+                if name == "web_search"
+                    || name == "google_search"
+                    || name == "web_search_20250305"
+                    || name == "builtin_web_search"
                 {
                     continue;
                 }
@@ -742,23 +751,7 @@ mod tests {
                 tool_call_id: None,
                 name: None,
             }],
-            stream: false,
-            n: None,
-            max_tokens: None,
-            temperature: None,
-            top_p: None,
-            stop: None,
-            response_format: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         // Auto mode (default) should cap gemini-3-pro thinking budget to 24576
@@ -778,6 +771,7 @@ mod tests {
         update_thinking_budget_config(ThinkingBudgetConfig {
             mode: ThinkingBudgetMode::Custom,
             custom_value: 32000,
+            effort: None,
         });
 
         let req = OpenAIRequest {
@@ -800,13 +794,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         // 验证针对 Gemini 模型即使是 Custom 模式也会被修正为 24576
@@ -857,13 +845,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         let (result, _sid, _msg_count) = transform_openai_request(&req, "test-v", "gemini-1.5-flash");
@@ -894,6 +876,7 @@ mod tests {
             thinking: Some(ThinkingConfig {
                 thinking_type: Some("enabled".to_string()),
                 budget_tokens: Some(16000),
+                effort: None,
             }),
             max_tokens: None,
             temperature: None,
@@ -903,12 +886,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
+            ..Default::default()
         };
 
         // Pass explicit gemini-3-pro-preview which doesn't have "-thinking" suffix
@@ -934,23 +912,7 @@ mod tests {
                 tool_call_id: None,
                 name: None,
             }],
-            stream: false,
-            n: None,
-            thinking: None,
-            max_tokens: None,
-            temperature: None,
-            top_p: None,
-            stop: None,
-            response_format: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: Some("1024x1024".to_string()),
-            quality: Some("hd".to_string()),
-            person_generation: None,
+            ..Default::default()
         };
 
         // Pass gemini-3-pro-image which matches "gemini-3-pro" substring
@@ -987,13 +949,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         let (result, _sid, _msg_count) = transform_openai_request(&req, "test-p", "gemini-3-pro-high-thinking");
@@ -1026,6 +982,7 @@ mod tests {
             thinking: Some(ThinkingConfig {
                 thinking_type: Some("enabled".to_string()),
                 budget_tokens: Some(32768),
+                effort: None,
             }),
             max_tokens: None,
             temperature: None,
@@ -1035,12 +992,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
-            person_generation: None,
+            ..Default::default()
         };
 
         // Test with Flash model
@@ -1076,33 +1028,8 @@ mod tests {
                 tool_call_id: None,
                 name: None,
             }],
-            stream: false,
-            n: None,
-            max_tokens: None,
-            temperature: None,
-            top_p: None,
-            stop: None,
-            response_format: None,
-            tools: Some(vec![json!({
-                "type": "function",
-                "function": {
-                    "name": "test_tool",
-                    "description": "Test tool",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            })]),
-            tool_choice: None,
-            parallel_tool_calls: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
             person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         // Simulate Vertex AI path
@@ -1138,20 +1065,8 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            stream: false,
-            temperature: None,
-            top_p: None,
-            max_tokens: None,
-            n: None,
-            stop: None,
-            response_format: None,
-            instructions: None,
-            input: None,
-            prompt: None,
-            size: None,
-            quality: None,
             person_generation: None,
-            thinking: None,
+            ..Default::default()
         };
 
         // 2. Transform request
@@ -1167,4 +1082,3 @@ mod tests {
         crate::proxy::config::update_image_thinking_mode(Some("enabled".to_string()));
     }
 }
-

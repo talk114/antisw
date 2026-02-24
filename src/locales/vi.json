@@ -112,6 +112,7 @@
         }
     },
     "accounts": {
+        "account": "Tài khoản",
         "search_placeholder": "Tìm kiếm email...",
         "all": "Tất cả",
         "available": "Khả dụng",
@@ -142,7 +143,17 @@
         "forbidden": "403",
         "forbidden_badge": "403",
         "forbidden_tooltip": "API trả về 403 Forbidden, tài khoản không có quyền truy cập Gemini Code Assist",
-        "forbidden_msg": "Bị chặn, bỏ qua tự động làm mới",
+        "forbidden_msg": "Bị cấm, bỏ qua tự động làm mới",
+        "status": {
+            "forbidden": "403 Bị cấm",
+            "disabled": "Tài khoản bị vô hiệu hóa",
+            "proxy_disabled": "Proxy bị vô hiệu hóa"
+        },
+        "error_details": "Chi tiết lỗi",
+        "error_status": "Trạng thái lỗi",
+        "error_time": "Thời gian phát hiện",
+        "view_error": "Xem lý do",
+        "click_to_verify": "Nhấp để xác minh",
         "no_data": "Không có dữ liệu",
         "last_used": "Dùng lần cuối",
         "reset_time": "Thời gian reset",
@@ -820,18 +831,9 @@
             "restore_defaults": "Khôi phục Mặc định",
             "reset_all": "Đặt lại Tất cả"
         },
-        "models": {
-            "flash": "Siêu nhanh",
-            "flash_thinking": "Khả năng Tư duy",
-            "pro_high": "Tư duy Tốt nhất",
-            "pro_low": "Hạn mức Thấp",
-            "sonnet": "Tư duy Code",
-            "sonnet_thinking": "Chuỗi Tư duy",
-            "opus_thinking": "Tư duy Mạnh nhất"
-        },
         "router": {
             "title": "Bộ Định tuyến Model (Router)",
-            "subtitle": "Định tuyến model theo nhóm (Series) hoặc thêm ánh xạ chính xác.\nLưu ý: Các native model Claude (ví dụ: claude-opus-4-5-thinking) mặc định sẽ bỏ qua nhóm series và đi thẳng. Dùng \"Định tuyến Tùy chỉnh Cao cấp\" để ghi đè.",
+            "subtitle": "Định tuyến model theo nhóm (Series) hoặc thêm ánh xạ chính xác.\nLưu ý: Các native model Claude (ví dụ: claude-opus-4-6-thinking) mặc định sẽ bỏ qua nhóm series và đi thẳng. Dùng \"Định tuyến Tùy chỉnh Cao cấp\" để ghi đè.",
             "subtitle_simple": "Tùy chỉnh định tuyến model với ký tự đại diện hoặc ánh xạ chính xác",
             "background_task_title": "Mô hình tác vụ nền",
             "background_task_desc": "Mô hình được sử dụng cho các tác vụ nền của Claude CLI như tạo tiêu đề, tóm tắt, v.v. (Mặc định: gemini-2.5-flash)",
@@ -841,14 +843,10 @@
             "presets_applied": "Đã áp dụng cài đặt sẵn thành công",
             "custom_mappings": "Ánh xạ Tùy chỉnh",
             "group_title": "Nhóm Series (Đích đến)",
-            "gemini3_group_label": "Gemini 3 (Khuyên dùng)",
-            "gemini3_option_high": "gemini-3-pro-high (Chất lượng Cao)",
-            "gemini3_option_low": "gemini-3-pro-low (Cân bằng)",
-            "gemini3_option_flash": "gemini-3-flash (Nhanh)",
             "groups": {
                 "claude_45": {
                     "name": "Dòng Claude 4.6 TK",
-                    "desc": "Opus 4.6 TK"
+                    "desc": "Opus 4.5 TK"
                 },
                 "claude_35": {
                     "name": "Dòng Claude 3.5",

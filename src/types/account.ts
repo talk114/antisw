@@ -14,6 +14,10 @@ export interface Account {
     proxy_disabled_at?: number;
     protected_models?: string[];
     custom_label?: string;  // 用户自定义标签
+    validation_blocked?: boolean;
+    validation_blocked_until?: number;
+    validation_blocked_reason?: string;
+    validation_url?: string;
     created_at: number;
     last_used: number;
 }
@@ -31,6 +35,7 @@ export interface QuotaData {
     models: ModelQuota[];
     last_updated: number;
     is_forbidden?: boolean;
+    forbidden_reason?: string;
     subscription_tier?: string;  // 订阅类型: FREE/PRO/ULTRA
 }
 

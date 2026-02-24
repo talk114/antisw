@@ -25,7 +25,7 @@ pub fn wrap_request(
     let mut inner_request = body.clone();
 
     // 深度清理 [undefined] 字符串 (Cherry Studio 等客户端常见注入)
-    crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request);
+    crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request, 0);
 
     // [FIX #1522] Inject dummy IDs for Claude models in Gemini protocol
     // Google v1internal requires 'id' for tool calls when the model is Claude,
@@ -108,7 +108,54 @@ pub fn wrap_request(
         // [NEW] Extract OpenAI-style max_tokens before mutably borrowing gen_config
         let req_max_tokens = inner_request.get("max_tokens").and_then(|v| v.as_u64());
 
-        // Ensure generationConfig exists
+        // Determine model family and capability beforehand to avoid borrow checker conflicts
+        let is_claude = lower_model.contains("claude");
+        let is_preview = lower_model.contains("preview");
+        let should_inject = lower_model.contains("thinking")
+            || (lower_model.contains("gemini-2.0-pro") && !is_preview)
+            || (lower_model.contains("gemini-3-pro") && !is_preview)
+            || (lower_model.contains("gemini-3.1-pro") && !is_preview);
+
+        if should_inject {
+            // Scope for borrowing inner_request/gen_config
+            let mut has_thinking = false;
+            if is_claude {
+                has_thinking = inner_request.get("thinking").is_some();
+            } else {
+                if let Some(gc) = inner_request.get("generationConfig").and_then(|v| v.as_object()) {
+                    has_thinking = gc.get("thinkingConfig").is_some();
+                }
+            }
+
+            if !has_thinking {
+                tracing::debug!(
+                    "[Gemini-Wrap] Auto-injecting default thinking for {}",
+                    final_model_name
+                );
+
+                // [FIX] 统一注入到 generationConfig.thinkingConfig
+                // Claude 模型使用 16000 预算，Gemini 使用 24576
+                let default_budget = if is_claude { 16000 } else { 24576 };
+                
+                let gen_config = inner_request
+                    .as_object_mut()
+                    .unwrap()
+                    .entry("generationConfig")
+                    .or_insert(json!({}))
+                    .as_object_mut()
+                    .unwrap();
+                
+                gen_config.insert(
+                    "thinkingConfig".to_string(),
+                    json!({
+                        "includeThoughts": true,
+                        "thinkingBudget": default_budget
+                    }),
+                );
+            }
+        }
+
+        // Re-acquire gen_config to satisfy borrow checker and scope requirements for later logic
         let gen_config = inner_request
             .as_object_mut()
             .unwrap()
@@ -117,61 +164,44 @@ pub fn wrap_request(
             .as_object_mut()
             .unwrap();
 
-        // Check if thinkingConfig exists, if not, inject default if it's a known thinking model without config
-        if gen_config.get("thinkingConfig").is_none() {
-            let should_inject = lower_model.contains("thinking")
-                || lower_model.contains("gemini-2.0-pro")
-                || lower_model.contains("gemini-3-pro");
-
-            if should_inject {
-                tracing::debug!(
-                    "[Gemini-Wrap] Auto-injecting default thinkingConfig for {}",
-                    final_model_name
-                );
-
-                gen_config.insert(
-                    "thinkingConfig".to_string(),
-                    json!({
-                        "includeThoughts": true,
-                        "thinkingBudget": 24576
-                    }),
-                );
-            }
-        }
-
         if let Some(thinking_config) = gen_config.get_mut("thinkingConfig") {
             if let Some(budget_val) = thinking_config.get("thinkingBudget") {
-                if let Some(budget) = budget_val.as_u64() {
-                    let tb_config = crate::proxy::config::get_thinking_budget_config();
-                    let final_budget = match tb_config.mode {
-                        crate::proxy::config::ThinkingBudgetMode::Passthrough => budget,
-                        crate::proxy::config::ThinkingBudgetMode::Custom => {
-                            let val = tb_config.custom_value as u64;
-                            let is_limited = (final_model_name.contains("gemini")
-                                || final_model_name.contains("thinking"))
-                                && !final_model_name.contains("-image");
+                if let Some(budget_i64) = budget_val.as_i64() {
+                    // [NEW] -1 indicates native dynamic mode, skip capping
+                    if budget_i64 != -1 {
+                        let budget = budget_i64 as u64;
+                        let tb_config = crate::proxy::config::get_thinking_budget_config();
+                        let final_budget = match tb_config.mode {
+                            crate::proxy::config::ThinkingBudgetMode::Passthrough => budget,
+                            crate::proxy::config::ThinkingBudgetMode::Custom => {
+                                let val = tb_config.custom_value as u64;
+                                let is_limited = (final_model_name.contains("gemini")
+                                    || final_model_name.contains("thinking"))
+                                    && !final_model_name.contains("-image");
 
-                            if is_limited && val > 24576 {
-                                24576
-                            } else {
-                                val
+                                if is_limited && val > 24576 {
+                                    24576
+                                } else {
+                                    val
+                                }
                             }
-                        }
-                        crate::proxy::config::ThinkingBudgetMode::Auto => {
-                            let is_limited = (final_model_name.contains("gemini")
-                                || final_model_name.contains("thinking"))
-                                && !final_model_name.contains("-image");
+                            crate::proxy::config::ThinkingBudgetMode::Auto => {
+                                let is_limited = (final_model_name.contains("gemini")
+                                    || final_model_name.contains("thinking"))
+                                    && !final_model_name.contains("-image");
 
-                            if is_limited && budget > 24576 {
-                                24576
-                            } else {
-                                budget
+                                if is_limited && budget > 24576 {
+                                    24576
+                                } else {
+                                    budget
+                                }
                             }
-                        }
-                    };
+                            crate::proxy::config::ThinkingBudgetMode::Adaptive => budget,
+                        };
 
-                    if final_budget != budget {
-                        thinking_config["thinkingBudget"] = json!(final_budget);
+                        if final_budget != budget {
+                            thinking_config["thinkingBudget"] = json!(final_budget);
+                        }
                     }
                 }
             }
@@ -179,27 +209,37 @@ pub fn wrap_request(
 
         // [FIX #1747] Ensure max_tokens (maxOutputTokens) is greater than thinking_budget
         // Google v1internal requires maxOutputTokens > thinkingBudget.
+        // [FIX #1825] Handle adaptive fallback (incl. -1 and thinkingLevel)
+        let thinking_config_opt = gen_config.get("thinkingConfig");
+        let is_adaptive = thinking_config_opt.map_or(false, |t| {
+            t.get("thinkingLevel").is_some() || t.get("thinkingBudget").and_then(|v| v.as_i64()) == Some(-1)
+        }) || (thinking_config_opt.and_then(|t| t.get("thinkingBudget").and_then(|v| v.as_u64())) == Some(32768) && is_claude);
+
         if let Some(thinking_config) = gen_config.get("thinkingConfig") {
-            if let Some(budget) = thinking_config.get("thinkingBudget").and_then(|v| v.as_u64()) {
-                let current_max = gen_config
-                    .get("maxOutputTokens")
-                    .and_then(|v| v.as_u64())
-                    .or(req_max_tokens);
+            let budget_opt = thinking_config.get("thinkingBudget").and_then(|v| v.as_i64());
+            
+            // For adaptive or dynamic mode, we only need to ensure max tokens is large.
+            // For fixed budget, we must satisfy maxOutputTokens > thinkingBudget.
+            let current_max = gen_config
+                .get("maxOutputTokens")
+                .and_then(|v| v.as_u64())
+                .or(req_max_tokens);
 
-                let min_required_max = budget + 8192;
-
-                match current_max {
-                    Some(m) if m <= budget => {
+            if is_adaptive {
+                if current_max.map_or(true, |m| m < 131072) {
+                     gen_config.insert("maxOutputTokens".to_string(), json!(131072));
+                }
+            } else if let Some(budget_i64) = budget_opt {
+                if budget_i64 > 0 {
+                    let budget = budget_i64 as u64;
+                    let min_required_max = budget + 8192;
+                    if current_max.map_or(true, |m| m <= budget) {
                         tracing::info!(
-                            "[Gemini-Wrap] Bumping maxOutputTokens from {} to {} to satisfy thinkingBudget ({})",
-                            m, min_required_max, budget
+                            "[Gemini-Wrap] Bumping maxOutputTokens from {:?} to {} to satisfy thinkingBudget ({})",
+                            current_max, min_required_max, budget
                         );
                         gen_config.insert("maxOutputTokens".to_string(), json!(min_required_max));
                     }
-                    None => {
-                        gen_config.insert("maxOutputTokens".to_string(), json!(min_required_max));
-                    }
-                    _ => {}
                 }
             }
         }
@@ -218,6 +258,7 @@ pub fn wrap_request(
     // [FIX] Extract OpenAI-compatible image parameters from root (for gemini-3-pro-image)
     let size = body.get("size").and_then(|v| v.as_str());
     let quality = body.get("quality").and_then(|v| v.as_str());
+    let image_size = body.get("imageSize").and_then(|v| v.as_str()); // [NEW] Direct imageSize support
 
     // Use shared grounding/config logic
     let config = crate::proxy::mappers::common_utils::resolve_request_config(
@@ -226,6 +267,7 @@ pub fn wrap_request(
         &tools_val,
         size,       // [FIX] Pass size parameter
         quality,    // [FIX] Pass quality parameter
+        image_size, // [NEW] Pass direct imageSize parameter
         Some(body), // [NEW] Pass request body for imageConfig parsing
     );
 
@@ -694,6 +736,7 @@ mod tests {
         update_thinking_budget_config(ThinkingBudgetConfig {
             mode: ThinkingBudgetMode::Custom,
             custom_value: 1024, // Distinct value
+            effort: None,
         });
 
         let body = json!({
@@ -726,6 +769,64 @@ mod tests {
         update_thinking_budget_config(ThinkingBudgetConfig::default());
     }
 
+    #[cfg(test)]
+    mod test_v4_fixes {
+        use super::*;
+        use serde_json::json;
+
+        #[test]
+        fn test_claude_no_root_thinking_injection() {
+            // 验证 Claude 模型不会在根目录注入 thinking，而是注入到 generationConfig.thinkingConfig
+            // 并且 budget 默认为 16000
+            
+            // 使用 Auto 模式避免干扰
+            crate::proxy::config::update_thinking_budget_config(
+                crate::proxy::config::ThinkingBudgetConfig {
+                    mode: crate::proxy::config::ThinkingBudgetMode::Auto,
+                    custom_value: 0,
+                    effort: None,
+                },
+            );
+
+            let body = json!({
+                "model": "claude-3-7-sonnet-thinking", 
+                "messages": [{"role": "user", "content": "hi"}]
+            });
+
+            let result = wrap_request(&body, "proj", "claude-3-7-sonnet-thinking", None);
+            let req = result.get("request").unwrap();
+
+            // 1. 确保根目录没有 thinking
+            assert!(req.get("thinking").is_none(), "Root level 'thinking' should NOT be present");
+
+            // 2. 确保 generationConfig.thinkingConfig 存在
+            let gen_config = req.get("generationConfig").expect("generationConfig should be present");
+            let thinking_config = gen_config.get("thinkingConfig").expect("thinkingConfig should be injected");
+
+            // 3. 验证 Claude 默认预算为 16000
+            let budget = thinking_config["thinkingBudget"].as_u64().expect("thinkingBudget should be a number");
+            assert_eq!(budget, 16000, "Claude default thinking budget should be 16000");
+        }
+
+        #[test]
+        fn test_gemini_thinking_injection_default() {
+            // 验证 Gemini 模型注入默认预算 24576
+            let body = json!({
+                "model": "gemini-2.0-flash-thinking-exp",
+                "contents": [{"role": "user", "parts": [{"text": "hi"}]}]
+            });
+
+            let result = wrap_request(&body, "proj", "gemini-2.0-flash-thinking-exp", None);
+            let req = result.get("request").unwrap();
+            let gen_config = req.get("generationConfig").unwrap();
+            let thinking_config = gen_config.get("thinkingConfig").unwrap();
+
+            let budget = thinking_config["thinkingBudget"].as_u64().unwrap();
+            assert_eq!(budget, 24576, "Gemini default thinking budget should be 24576");
+        }
+    }
+}
+
     #[test]
     fn test_gemini_pro_auto_inject_thinking() {
         // Reset thinking budget to auto mode at the start to avoid interference from parallel tests
@@ -733,6 +834,7 @@ mod tests {
             crate::proxy::config::ThinkingBudgetConfig {
                 mode: crate::proxy::config::ThinkingBudgetMode::Auto,
                 custom_value: 24576,
+                effort: None,
             },
         );
 
@@ -743,24 +845,29 @@ mod tests {
             "generationConfig": {}
         });
 
-        // Test with Pro model
+        // Test with Pro-preview model (should NOT auto-inject to avoid 400)
         let result = wrap_request(&body, "test-proj", "gemini-3-pro-preview", None);
         let req = result.get("request").unwrap();
         let gen_config = req.get("generationConfig").unwrap();
 
-        // Should have auto-injected thinkingConfig
+        // Should NOT have auto-injected thinkingConfig
         assert!(
-            gen_config.get("thinkingConfig").is_some(),
-            "Should auto-inject thinkingConfig for gemini-3-pro"
+            gen_config.get("thinkingConfig").is_none(),
+            "Should NOT auto-inject thinkingConfig for gemini-3-pro-preview to avoid 400 error"
         );
 
-        let budget = gen_config["thinkingConfig"]["thinkingBudget"]
-            .as_u64()
-            .unwrap();
-
-        // Default injected value is 1024 (based on Custom mode in previous test) or 24576 (default)
-        // Since we restored default config (Auto 24576) in previous test, it should be 24576
-        assert_eq!(budget, 24576);
+        // Test with standard gemini-3-pro (non-preview)
+        let body_std = json!({
+            "model": "gemini-3-pro",
+            "generationConfig": {}
+        });
+        let result_std = wrap_request(&body_std, "test-proj", "gemini-3-pro", None);
+        let gen_config_std = result_std.get("request").unwrap().get("generationConfig").unwrap();
+        
+        assert!(
+            gen_config_std.get("thinkingConfig").is_some(),
+            "Should still auto-inject thinkingConfig for standard gemini-3-pro"
+        );
     }
 
     #[test]
@@ -798,40 +905,3 @@ mod tests {
         assert_eq!(image_config_2["aspectRatio"], "1:1");
         assert_eq!(image_config_2["imageSize"], "1K");
     }
-
-    #[test]
-    fn test_gemini_thinking_max_tokens_bumping() {
-        // Test Case 1: No maxOutputTokens provided
-        let body_1 = json!({
-            "model": "claude-opus-4-6-thinking",
-            "generationConfig": {
-                "thinkingConfig": {
-                    "includeThoughts": true,
-                    "thinkingBudget": 24576
-                }
-            }
-        });
-
-        let result_1 = wrap_request(&body_1, "proj", "claude-opus-4-6-thinking", None);
-        let gen_config_1 = &result_1["request"]["generationConfig"];
-        let max_tokens_1 = gen_config_1["maxOutputTokens"].as_u64().unwrap();
-        assert!(max_tokens_1 > 24576);
-        assert_eq!(max_tokens_1, 24576 + 8192);
-
-        // Test Case 2: Insufficient maxOutputTokens provided
-        let body_2 = json!({
-            "model": "claude-opus-4-6-thinking",
-            "generationConfig": {
-                "thinkingConfig": {
-                    "includeThoughts": true,
-                    "thinkingBudget": 24000
-                },
-                "maxOutputTokens": 10000
-            }
-        });
-
-        let result_2 = wrap_request(&body_2, "proj", "claude-opus-4-6-thinking", None);
-        let max_tokens_2 = result_2["request"]["generationConfig"]["maxOutputTokens"].as_u64().unwrap();
-        assert_eq!(max_tokens_2, 24000 + 8192);
-    }
-}

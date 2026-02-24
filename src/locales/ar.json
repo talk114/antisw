@@ -111,6 +111,7 @@
         }
     },
     "accounts": {
+        "account": "الحساب",
         "search_placeholder": "بحث عن بريد إلكتروني...",
         "all": "الكل",
         "available": "متاح",
@@ -147,6 +148,16 @@
         "forbidden_badge": "403",
         "forbidden_tooltip": "أعاد API الخطأ 403 Forbidden، الحساب ليس لديه إذن لخدمة Gemini Code Assist",
         "forbidden_msg": "ممنوع، تخطي التحديث التلقائي",
+        "status": {
+            "forbidden": "403 Forbidden",
+            "disabled": "الحساب معطل",
+            "proxy_disabled": "الوكيل معطل"
+        },
+        "error_details": "تفاصيل الخطأ",
+        "error_status": "حالة الخطأ",
+        "error_time": "وقت الكشف",
+        "view_error": "عرض السبب",
+        "click_to_verify": "انقر للتحقق",
         "no_data": "لا توجد بيانات",
         "last_used": "آخر استخدام",
         "reset_time": "وقت إعادة التعيين",
@@ -815,18 +826,9 @@
             "restore_defaults": "استعادة التكوين الافتراضي",
             "reset_all": "إعادة تعيين الكل"
         },
-        "models": {
-            "flash": "فائق السرعة",
-            "flash_thinking": "قدرة التفكير",
-            "pro_high": "أفضل منطق",
-            "pro_low": "حصة منخفضة",
-            "sonnet": "تفكير برمجي",
-            "sonnet_thinking": "سلسلة أفكار",
-            "opus_thinking": "أقوى تفكير"
-        },
         "router": {
             "title": "موجه النماذج",
-            "subtitle": "توجيه النماذج حسب السلسلة أو إضافة تعيينات دقيقة مخصصة.\nملاحظة: نماذج Claude الأصلية الممرة (مثل claude-opus-4-5-thinking) تتخطى مجموعات السلسلة افتراضيًا. استخدم \"توجيه مخصص خبير\" للتجاوز.",
+            "subtitle": "توجيه النماذج حسب السلسلة أو إضافة تعيينات دقيقة مخصصة.\nملاحظة: نماذج Claude الأصلية الممرة (مثل claude-opus-4-6-thinking) تتخطى مجموعات السلسلة افتراضيًا. استخدم \"توجيه مخصص خبير\" للتجاوز.",
             "subtitle_simple": "تخصيص توجيه النماذج باستخدام أحرف البدل أو التعيينات الدقيقة",
             "background_task_title": "نموذج المهام الخلفية",
             "background_task_desc": "النموذج المستخدم لمهام الخلفية لـ Claude CLI مثل توليد العناوين، والملخص، وما إلى ذلك. (الافتراضي: gemini-2.5-flash)",
@@ -836,14 +838,10 @@
             "presets_applied": "تم تطبيق الإعدادات المسبقة بنجاح",
             "custom_mappings": "تعيينات مخصصة",
             "group_title": "مجموعات السلاسل",
-            "gemini3_group_label": "Gemini 3 (موصى به)",
-            "gemini3_option_high": "gemini-3-pro-high (جودة عالية)",
-            "gemini3_option_low": "gemini-3-pro-low (متوازن)",
-            "gemini3_option_flash": "gemini-3-flash (سريع)",
             "groups": {
                 "claude_45": {
                     "name": "سلسلة Claude 4.6 TK",
-                    "desc": "Opus 4.6 TK"
+                    "desc": "Opus 4.5 TK"
                 },
                 "claude_35": {
                     "name": "سلسلة Claude 3.5",

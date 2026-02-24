@@ -44,7 +44,10 @@
         "delete_success": "Deleted successfully",
         "copied": "Copied to clipboard",
         "retry": "Retry",
-        "back": "Back"
+        "back": "Back",
+        "reason": "Reason",
+        "show_raw": "Show Raw",
+        "show_parsed": "Show Parsed"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -116,6 +119,7 @@
         }
     },
     "accounts": {
+        "account": "Account",
         "search_placeholder": "Search email...",
         "all": "All",
         "available": "Available",
@@ -152,6 +156,36 @@
         "forbidden_badge": "403",
         "forbidden_tooltip": "API returned 403 Forbidden, account has no permission for Gemini Code Assist",
         "forbidden_msg": "Forbidden, skip auto-refresh",
+        "status": {
+            "forbidden": "403 Forbidden",
+            "disabled": "Account Disabled",
+            "proxy_disabled": "Proxy Disabled",
+            "validation_required": "Verification Required",
+            "violation_blocked": "Blocked due to Violation"
+        },
+        "error_details": "Error Details",
+        "error_status": "Error Status",
+        "error_time": "Detection Time",
+        "view_error": "View Reason",
+        "click_to_verify": "Click to Verify",
+        "copy_validation_url": "Copy Verification Link",
+        "validation_url_copied": "Verification link copied to clipboard",
+        "fix_guide": {
+            "title": "Terminal Quick Fix (Resolves internal 403s)",
+            "step1_title": "🚀 Quickest Solution",
+            "step1_desc": "Open your Terminal and run the following command to tell Google \"it's me\", which resolves most 403 blocks:",
+            "step1_li1": "Press Enter, input <1>Y</1> when prompted to continue.",
+            "step1_li2": "Your browser will open automatically, select your account and click \"Allow\".",
+            "step1_li3": "Once you see <1>You are now authenticated</1>, you're all set!",
+            "step2_title": "🧹 If that fails (Clear Cache)",
+            "step2_li1_prefix": "Run this to clear your old credentials:",
+            "step2_li2_prefix": "Then log in again:",
+            "tips_title": "💡 Common Tips",
+            "tip1": "If you still get 403, try running <1>unset GOOGLE_APPLICATION_CREDENTIALS</1> in terminal first.",
+            "tip2": "For production environments, using a <1>Service Account</1> JSON key is highly recommended for stability and headless operation.",
+            "tip3": "If it still fails, check the Generative Language API in <1>Google Cloud Console</1> to see if permissions are frozen. If so, your account is under risk control. Please let the account cool down for 72 hours before trying again.",
+            "tip4": "You can also try <1>npm install -g @google/gemini-cli</1>. If it doesn't throw errors, simply deleting and re-authorizing the account in the app will likely fix it."
+        },
         "no_data": "No Data",
         "last_used": "Last Used",
         "reset_time": "Reset Time",
@@ -497,6 +531,7 @@
             "tech_stack": "Tech Stack",
             "author": "Author",
             "wechat": "WeChat",
+            "telegram": "Telegram Channel",
             "github": "GitHub",
             "view_code": "View Code",
             "copyright": "Copyright © 2025-2026 Antigravity. All rights reserved.",
@@ -540,9 +575,17 @@
             "mode": {
                 "auto": "Auto Limit",
                 "passthrough": "Passthrough",
-                "custom": "Custom"
+                "custom": "Custom",
+                "adaptive": "Adaptive"
+            },
+            "effort_label": "Thinking Effort",
+            "effort": {
+                "low": "Low",
+                "medium": "Medium",
+                "high": "High"
             },
             "auto_hint": "Auto mode: Automatically caps budget to 24576 for Flash, -thinking suffix models, and Web Search requests.",
+            "adaptive_hint": "Adaptive mode: The model automatically adjusts thinking budget based on task complexity. Recommended for Claude 4.6+.",
             "passthrough_warning": "Passthrough: Uses caller's value directly. High values may cause failures.",
             "custom_value_hint": "Rec: 24576 (Flash) or 51200 (Extended)",
             "tokens": "tokens"
@@ -780,10 +823,15 @@
                 "btn_view": "View Config",
                 "btn_restore": "Restore",
                 "btn_restore_backup": "Restore Backup",
+                "btn_clear": "Clear Config",
+                "clear_confirm_title": "Confirm Clear Config",
+                "clear_confirm_message": "Are you sure you want to clear OpenCode configuration? This will remove the config file.",
                 "toast": {
                     "config_missing": "Please generate API Key and start service first",
                     "sync_success": "OpenCode config synced successfully",
-                    "sync_error": "OpenCode sync failed: {{error}}"
+                    "sync_error": "OpenCode sync failed: {{error}}",
+                    "clear_success": "OpenCode config cleared successfully",
+                    "clear_error": "Failed to clear OpenCode config: {{error}}"
                 },
                 "modal": {
                     "view_title": "OpenCode Config Viewer",
@@ -795,7 +843,11 @@
                 "restore_backup_confirm": "Are you sure you want to restore OpenCode config from backup?",
                 "modal_title": "Select OpenCode Models",
                 "select_models": "Select models to sync",
-                "btn_confirm_sync": "Confirm Sync"
+                "auth_plugin_warning": "Detected opencode-antigravity-auth plugin. Sync only creates provider antigravity-manager and will not overwrite the google provider/plugin.",
+                "btn_confirm_sync": "Confirm Sync",
+                "custom_base_url_label": "Custom Manager BaseURL",
+                "custom_base_url_desc": "For Docker Compose networking",
+                "custom_base_url_reset": "Reset"
             },
             "droid_sync": {
                 "modal_title": "Add models to Droid",
@@ -879,21 +931,24 @@
         },
         "model": {
             "flash": "Fast Response",
-            "flash_preview": "Flash Preview",
-            "flash_lite": "Lite & Fast",
-            "flash_thinking": "Thinking Capability",
+            "flash_preview": "Flash Preview (Flash 3.1)",
+            "flash_lite": "Lite & Fast (Lite)",
+            "flash_thinking": "Thinking Capability (Thinking)",
             "pro_legacy": "Legacy Pro",
-            "pro_low": "High Performance",
-            "pro_high": "Best Reasoning",
+            "pro_low": "3.1 Pro Low",
+            "pro_high": "3.1 Pro High",
             "pro_image": "Image Generation (1:1)",
             "pro_image_16_9": "Image Generation (16:9)",
             "pro_image_9_16": "Image Generation (9:16)",
             "pro_image_4_3": "Image Generation (4:3)",
             "pro_image_3_4": "Image Generation (3:4)",
             "pro_image_1_1": "Image Generation (1:1)",
-            "claude_sonnet": "Code Reasoning",
-            "claude_sonnet_thinking": "Chain of Thought",
-            "claude_opus_thinking": "Strongest Thinking"
+            "claude_sonnet": "Code Reasoning (Claude 4.6)",
+            "claude_sonnet_thinking": "Chain of Thought (4.6 Think)",
+            "claude_opus_thinking": "Strongest Thinking (Opus Think)",
+            "gemini_2_5_flash": "Flash Model (2.5 Flash)",
+            "gemini_2_5_pro": "High Performance (2.5 Pro)",
+            "claude_4_6": "Latest Reasoning (4.6)"
         },
         "mapping": {
             "title": "Claude Code Model Mapping",
@@ -918,7 +973,7 @@
         },
         "router": {
             "title": "Model Router",
-            "subtitle": "Route models by series or add custom exact mappings.\nNote: Native Claude pass-through models (e.g. claude-opus-4-5-thinking) bypass series groups by default. Use \"Expert Custom Routing\" to override.",
+            "subtitle": "Route models by series or add custom exact mappings.\nNote: Native Claude pass-through models (e.g. claude-sonnet-4-6-thinking, claude-opus-4-6-thinking) bypass series groups by default. Use \"Expert Custom Routing\" to override.",
             "subtitle_simple": "Customize model routing with wildcards or exact mappings",
             "background_task_title": "Background Task Model",
             "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
@@ -954,13 +1009,13 @@
             "custom_mappings": "Custom Mappings",
             "group_title": "Series Groups",
             "gemini3_group_label": "Gemini 3 (Recommended)",
-            "gemini3_option_high": "gemini-3-pro-high (High Quality)",
-            "gemini3_option_low": "gemini-3-pro-low (Balanced)",
+            "gemini3_option_high": "gemini-3.1-pro-high (High Quality)",
+            "gemini3_option_low": "gemini-3.1-pro-low (Balanced)",
             "gemini3_option_flash": "gemini-3-flash (Fast)",
             "groups": {
                 "claude_45": {
-                    "name": "Claude 4.6 TK Series",
-                    "desc": "Opus 4.6 TK (Thinking)"
+                    "name": "Opus 4.6 TK Series",
+                    "desc": "Opus 4.5 TK (Thinking)"
                 },
                 "claude_35": {
                     "name": "Claude 3.5 Series",
@@ -1140,19 +1195,19 @@
         }
     },
     "update_notification": {
-        "title": "New Version Available",
+        "title": "Updating...",
         "message": "A new version is ready with optimizations and improvements. Current: v{{current}}",
-        "ready": "Update Ready",
-        "downloading": "Downloading update...",
+        "ready": "Update Ready!",
+        "downloading": "Downloading update in background...",
         "restarting": "Restarting application...",
-        "auto_update": "Download Update",
+        "auto_update": "Auto Update",
+        "restart_prompt": "Update downloaded and ready to install. Restart now?",
+        "btn_restart": "Restart",
+        "btn_later": "Later",
         "toast": {
-            "not_ready": "Auto-update package not ready yet, redirecting to download page...",
-            "failed": "Auto-update failed, redirecting to download page..."
-        },
-        "force_update_title": "Update Required",
-        "force_update_message": "Your version ({{current}}) is below the minimum required version ({{min}}). Please update immediately to continue using the app.",
-        "force_update_button": "Update Now"
+            "not_ready": "Update artifacts are not ready yet. Will retry later.",
+            "failed": "Auto-update failed"
+        }
     },
     "login": {
         "title": "Secure Access Control",

@@ -41,6 +41,7 @@ import {
     Tag,
     X,
     Check,
+    Clock,
 } from 'lucide-react';
 import { Account } from '../../types/account';
 import { useTranslation } from 'react-i18next';
@@ -73,6 +74,7 @@ interface AccountTableProps {
     onUpdateLabel?: (accountId: string, label: string) => void;
     /** 拖拽排序回调，当用户完成拖拽时触发 */
     onReorder?: (accountIds: string[]) => void;
+    onViewError: (accountId: string) => void;
 }
 
 interface SortableRowProps {
@@ -92,6 +94,7 @@ interface SortableRowProps {
     onToggleProxy: () => void;
     onWarmup?: () => void;
     onUpdateLabel?: (label: string) => void;
+    onViewError: () => void;
 }
 
 interface AccountRowContentProps {
@@ -99,6 +102,7 @@ interface AccountRowContentProps {
     isCurrent: boolean;
     isRefreshing: boolean;
     isSwitching: boolean;
+    isDisabled: boolean;
     onSwitch: () => void;
     onRefresh: () => void;
     onViewDevice: () => void;
@@ -108,6 +112,7 @@ interface AccountRowContentProps {
     onToggleProxy: () => void;
     onWarmup?: () => void;
     onUpdateLabel?: (label: string) => void;
+    onViewError: () => void;
 }
 
 // ============================================================================
@@ -122,11 +127,13 @@ interface AccountRowContentProps {
 
 const MODEL_GROUPS = {
     CLAUDE: [
-        'claude-sonnet-4-5',
-        'claude-sonnet-4-5-thinking',
-        'claude-opus-4-5-thinking'
+        'claude-opus-4-6-thinking',
+        'claude'
     ],
     GEMINI_PRO: [
+        'gemini-3.1-pro-high',
+        'gemini-3.1-pro-low',
+        'gemini-3.1-pro-preview',
         'gemini-3-pro-high',
         'gemini-3-pro-low',
         'gemini-3-pro-preview'
@@ -135,6 +142,19 @@ const MODEL_GROUPS = {
         'gemini-3-flash'
     ]
 };
+
+const MODEL_ID_ALIASES: Record<string, string[]> = {
+    'gemini-3-pro-high': ['gemini-3-pro-high', 'gemini-3.1-pro-high'],
+    'gemini-3-pro-low': ['gemini-3-pro-low', 'gemini-3.1-pro-low'],
+    'gemini-3-pro-preview': ['gemini-3-pro-preview', 'gemini-3.1-pro-preview'],
+    'gemini-3.1-pro-high': ['gemini-3.1-pro-high', 'gemini-3-pro-high'],
+    'gemini-3.1-pro-low': ['gemini-3.1-pro-low', 'gemini-3-pro-low'],
+    'gemini-3.1-pro-preview': ['gemini-3.1-pro-preview', 'gemini-3-pro-preview'],
+};
+
+function getModelAliases(modelId: string): string[] {
+    return MODEL_ID_ALIASES[modelId] || [modelId];
+}
 
 function isModelProtected(protectedModels: string[] | undefined, modelName: string): boolean {
     if (!protectedModels || protectedModels.length === 0) return false;
@@ -194,6 +214,7 @@ function SortableAccountRow({
     onToggleProxy,
     onWarmup,
     onUpdateLabel,
+    onViewError,
 }: SortableRowProps) {
     const { t } = useTranslation();
     const {
@@ -249,6 +270,7 @@ function SortableAccountRow({
                 isCurrent={isCurrent}
                 isRefreshing={isRefreshing}
                 isSwitching={isSwitching}
+                isDisabled={Boolean(account.disabled)}
                 onSwitch={onSwitch}
                 onRefresh={onRefresh}
                 onViewDevice={onViewDevice}
@@ -258,6 +280,7 @@ function SortableAccountRow({
                 onToggleProxy={onToggleProxy}
                 onWarmup={onWarmup}
                 onUpdateLabel={onUpdateLabel}
+                onViewError={onViewError}
             />
         </tr>
     );
@@ -272,6 +295,7 @@ function AccountRowContent({
     isCurrent,
     isRefreshing,
     isSwitching,
+    isDisabled,
     onSwitch,
     onRefresh,
     onViewDevice,
@@ -281,6 +305,7 @@ function AccountRowContent({
     onToggleProxy,
     onWarmup,
     onUpdateLabel,
+    onViewError,
 }: AccountRowContentProps) {
     const { t } = useTranslation();
     const { config, showAllQuotas } = useConfigStore();
@@ -315,29 +340,54 @@ function AccountRowContent({
     const pinnedModels = config?.pinned_quota_models?.models || Object.keys(MODEL_CONFIG);
 
     // 根据 show_all 状态决定显示哪些模型
+    const uniqueLabels = new Set<string>();
     const displayModels = sortModels(
-        showAllQuotas
+        (showAllQuotas
             ? (account.quota?.models || []).map(m => {
                 const config = MODEL_CONFIG[m.name.toLowerCase()];
+                const label = config?.i18nKey ? t(config.i18nKey) : (config?.shortLabel || config?.label || m.name);
                 return {
                     id: m.name.toLowerCase(),
-                    label: config?.shortLabel || config?.label || m.name,
+                    label: label,
                     protectedKey: config?.protectedKey || m.name.toLowerCase(),
                     data: m
                 };
             })
             : pinnedModels.filter(modelId => MODEL_CONFIG[modelId]).map(modelId => {
                 const config = MODEL_CONFIG[modelId];
+                const aliases = getModelAliases(modelId);
+                const label = config.i18nKey ? t(config.i18nKey) : (config.shortLabel || config.label);
                 return {
                     id: modelId,
-                    label: config.shortLabel || config.label,
+                    label: label,
                     protectedKey: config.protectedKey,
-                    data: account.quota?.models.find(m => m.name.toLowerCase() === modelId)
+                    data: account.quota?.models.find(m => aliases.includes(m.name.toLowerCase()))
                 };
             })
-    );
+        ).filter(m => {
+            // 过滤特定的 Claude/Gemini 思考变体 (在列表页隐藏)
+            const isHiddenThinking = m.id.includes('thinking');
 
-    const isDisabled = Boolean(account.disabled);
+            if (isHiddenThinking) return false;
+
+            // 基于标签去重 (例如 G3.1 Pro 只显示一次)
+            // 优先显示有配额数据的 ID
+            const labelKey = `${m.label}-${m.protectedKey}`;
+            if (uniqueLabels.has(labelKey)) {
+                return false;
+            }
+            if (m.data) {
+                uniqueLabels.add(labelKey);
+                return true;
+            }
+            return true;
+        })
+    ).filter((m, index, self) => {
+        // 第二次过滤：确保即使没有数据的重复 Label 也只保留一个
+        const labelKey = `${m.label}-${m.protectedKey}`;
+        return self.findIndex(t => `${t.label}-${t.protectedKey}` === labelKey) === index;
+    });
+
 
     return (
         <>
@@ -357,11 +407,9 @@ function AccountRowContent({
                                 {t('accounts.current').toUpperCase()}
                             </span>
                         )}
-
                         {isDisabled && (
                             <span
                                 className="px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-[10px] font-bold flex items-center gap-1 shadow-sm border border-rose-200/50"
-                                title={account.disabled_reason || t('accounts.disabled_tooltip')}
                             >
                                 <Ban className="w-2.5 h-2.5" />
                                 <span>{t('accounts.disabled')}</span>
@@ -371,7 +419,6 @@ function AccountRowContent({
                         {account.proxy_disabled && (
                             <span
                                 className="px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 text-[10px] font-bold flex items-center gap-1 shadow-sm border border-orange-200/50"
-                                title={account.proxy_disabled_reason || t('accounts.proxy_disabled_tooltip')}
                             >
                                 <Ban className="w-2.5 h-2.5" />
                                 <span>{t('accounts.proxy_disabled')}</span>
@@ -379,11 +426,18 @@ function AccountRowContent({
                         )}
 
                         {account.quota?.is_forbidden && (
-                            <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold flex items-center gap-1 shadow-sm border border-red-200/50" title={t('accounts.forbidden_tooltip')}>
+                            <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 text-[10px] font-bold flex items-center gap-1 shadow-sm border border-red-200/50">
                                 <Lock className="w-2.5 h-2.5" />
                                 <span>{t('accounts.forbidden')}</span>
                             </span>
                         )}
+                        {account.validation_blocked && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-bold flex items-center gap-1 shadow-sm border border-amber-200/50">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>{t('accounts.status.validation_required')}</span>
+                            </span>
+                        )}
+
 
                         {/* 订阅类型徽章 */}
                         {account.quota?.subscription_tier && (() => {
@@ -447,15 +501,39 @@ function AccountRowContent({
                             </div>
                         )}
                     </div>
+
                 </div>
             </td>
 
             {/* 模型配额列 */}
             <td className="px-2 py-1 align-middle">
-                {account.quota?.is_forbidden ? (
-                    <div className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50/50 dark:bg-red-900/10 p-1.5 rounded-lg border border-red-100 dark:border-red-900/30">
-                        <Ban className="w-4 h-4 shrink-0" />
-                        <span>{t('accounts.forbidden_msg')}</span>
+                {isDisabled || account.quota?.is_forbidden || account.validation_blocked ? (
+                    <div className={cn(
+                        "flex items-center justify-center gap-3 py-1.5 px-4 rounded-xl border group/error",
+                        account.validation_blocked ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-100/50 dark:border-amber-900/20" : "bg-red-50/50 dark:bg-red-900/10 border-red-100/50 dark:border-red-900/20"
+                    )}>
+                        <div className={cn(
+                            "flex items-center gap-1.5",
+                            account.validation_blocked ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
+                        )}>
+                            {account.validation_blocked ? <Clock className="w-3.5 h-3.5" /> : (account.quota?.is_forbidden ? <Lock className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />)}
+                            <span className={cn(
+                                "text-[11px] font-bold",
+                                account.validation_blocked ? "text-amber-700/80 dark:text-amber-400" : "text-red-700/80 dark:text-red-400"
+                            )}>
+                                {account.validation_blocked ? t('accounts.status.validation_required') : (isDisabled ? t('accounts.status.disabled') : t('accounts.forbidden_msg'))}
+                            </span>
+                        </div>
+                        <div className={cn(
+                            "w-px h-3",
+                            account.validation_blocked ? "bg-amber-200 dark:bg-amber-800/50" : "bg-red-200 dark:bg-red-800/50"
+                        )} />
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onViewError(); }}
+                            className="text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                        >
+                            {t('accounts.view_error')}
+                        </button>
                     </div>
                 ) : (
                     <div className={cn(
@@ -619,6 +697,7 @@ function AccountTable({
     onReorder,
     onWarmup,
     onUpdateLabel,
+    onViewError,
 }: AccountTableProps) {
     const { t } = useTranslation();
 
@@ -716,6 +795,7 @@ function AccountTable({
                                     onToggleProxy={() => onToggleProxy(account.id)}
                                     onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}
                                     onUpdateLabel={onUpdateLabel ? (label: string) => onUpdateLabel(account.id, label) : undefined}
+                                    onViewError={() => onViewError(account.id)}
                                 />
                             ))}
                         </tbody>
@@ -755,6 +835,8 @@ function AccountTable({
                                         onExport={() => { }}
                                         onDelete={() => { }}
                                         onToggleProxy={() => { }}
+                                        isDisabled={Boolean(activeAccount.disabled)}
+                                        onViewError={() => { }}
                                     />
                                 </tr>
                             </tbody>

@@ -109,6 +109,7 @@
         }
     },
     "accounts": {
+        "account": "Cuenta",
         "search_placeholder": "Buscar correo...",
         "all": "Todas",
         "available": "Disponibles",
@@ -144,7 +145,17 @@
         "forbidden": "403",
         "forbidden_badge": "403",
         "forbidden_tooltip": "API devolvió 403 Prohibido, la cuenta no tiene permiso para Gemini Code Assist",
-        "forbidden_msg": "Prohibido, omitir actualización automática",
+        "forbidden_msg": "Prohibido, saltar actualización automática",
+        "status": {
+            "forbidden": "403 Prohibido",
+            "disabled": "Cuenta deshabilitada",
+            "proxy_disabled": "Proxy deshabilitado"
+        },
+        "error_details": "Detalles del error",
+        "error_status": "Estado del error",
+        "error_time": "Hora de detección",
+        "view_error": "Ver motivo",
+        "click_to_verify": "Haga clic para verificar",
         "no_data": "Sin Datos",
         "last_used": "Último Uso",
         "reset_time": "Tiempo de Reinicio",
@@ -811,18 +822,9 @@
             "restore_defaults": "Restaurar Configuración Predeterminada",
             "reset_all": "Restablecer Todo"
         },
-        "models": {
-            "flash": "Ultra-rápido",
-            "flash_thinking": "Capacidad de Pensamiento",
-            "pro_high": "Mejor Razonamiento",
-            "pro_low": "Cuota Baja",
-            "sonnet": "Razonamiento de Código",
-            "sonnet_thinking": "Cadena de Pensamiento",
-            "opus_thinking": "Pensamiento Más Fuerte"
-        },
         "router": {
             "title": "Enrutador de Modelos",
-            "subtitle": "Enrute modelos por serie o agregue mapeos exactos personalizados.\nNota: Los modelos nativos de paso Claude (ej. claude-opus-4-5-thinking) omiten los grupos de series por defecto. Use \"Enrutamiento Personalizado Experto\" para sobreescribir.",
+            "subtitle": "Enrute modelos por serie o agregue mapeos exactos personalizados.\nNota: Los modelos nativos de paso Claude (ej. claude-opus-4-6-thinking) omiten los grupos de series por defecto. Use \"Enrutamiento Personalizado Experto\" para sobreescribir.",
             "subtitle_simple": "Personalice el enrutamiento de modelos con comodines o mapeos exactos",
             "background_task_title": "Modelo de Tarea en Segundo Plano",
             "background_task_desc": "Modelo usado para tareas en segundo plano de Claude CLI como generación de título, resumen, etc. (Predeterminado: gemini-2.5-flash)",
@@ -832,14 +834,10 @@
             "presets_applied": "Preajustes aplicados exitosamente",
             "custom_mappings": "Mapeos Personalizados",
             "group_title": "Grupos de Series",
-            "gemini3_group_label": "Gemini 3 (Recomendado)",
-            "gemini3_option_high": "gemini-3-pro-high (Alta Calidad)",
-            "gemini3_option_low": "gemini-3-pro-low (Balanceado)",
-            "gemini3_option_flash": "gemini-3-flash (Rápido)",
             "groups": {
                 "claude_45": {
                     "name": "Serie Claude 4.6 TK",
-                    "desc": "Opus 4.6 TK"
+                    "desc": "Opus 4.5 TK"
                 },
                 "claude_35": {
                     "name": "Serie Claude 3.5",

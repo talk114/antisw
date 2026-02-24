@@ -113,6 +113,7 @@
         }
     },
     "accounts": {
+        "account": "帳號",
         "search_placeholder": "搜尋信箱...",
         "all": "全部",
         "available": "可用",
@@ -144,6 +145,16 @@
         "forbidden_badge": "403",
         "forbidden_tooltip": "API 返回 403 Forbidden，帳號無權使用 Gemini Code Assist",
         "forbidden_msg": "帳號無權限，已跳過自動重新整理",
+        "status": {
+            "forbidden": "403 Forbidden",
+            "disabled": "帳號已停用",
+            "proxy_disabled": "反向代理已停用"
+        },
+        "error_details": "錯誤詳情",
+        "error_status": "錯誤狀態",
+        "error_time": "檢測時間",
+        "view_error": "檢視原因",
+        "click_to_verify": "點選去驗證",
         "no_data": "無資料",
         "last_used": "最後使用",
         "reset_time": "重置時間",
@@ -816,18 +827,9 @@
             "restore_defaults": "恢復預設配置",
             "reset_all": "重置全部"
         },
-        "models": {
-            "flash": "極速回應",
-            "flash_thinking": "思考能力",
-            "pro_high": "最強推理",
-            "pro_low": "低配額",
-            "sonnet": "程式碼推理",
-            "sonnet_thinking": "思維鏈",
-            "opus_thinking": "最強思維"
-        },
         "router": {
             "title": "模型路由中心 (Model Router)",
-            "subtitle": "按“規格家族”統一路由 OpenAI/Claude 模型，或新增最高優先順序的“精確對映”。\n注意：Claude 原生直通模型（claude-opus-4-5-thinking 等 3 個）預設直通，需在“專家精確對映”中新增規則才能修改。",
+            "subtitle": "按“規格家族”統一路由 OpenAI/Claude 模型，或新增最高優先順序的“精確對映”。\n注意：Claude 原生直通模型（claude-opus-4-6-thinking 等 3 個）預設直通，需在“專家精確對映”中新增規則才能修改。",
             "subtitle_simple": "透過萬用字元或精確對映自定義模型路由規則",
             "background_task_title": "後台任務模型",
             "background_task_desc": "用於 Claude CLI 後台任務的模型,如標題生成、總結等。(預設: gemini-2.5-flash)",
@@ -864,14 +866,10 @@
             "original_id": "原始模型 ID",
             "route_to": "路由目標",
             "group_title": "模型家族分組 (Series Groups)",
-            "gemini3_group_label": "Gemini 3 (推薦)",
-            "gemini3_option_high": "gemini-3-pro-high (高品質)",
-            "gemini3_option_low": "gemini-3-pro-low (均衡)",
-            "gemini3_option_flash": "gemini-3-flash (快速)",
             "groups": {
                 "claude_45": {
                     "name": "Claude 4.6 TK 系列",
-                    "desc": "Opus 4.6 TK (推理)"
+                    "desc": "Opus 4.5 TK (推理)"
                 },
                 "claude_35": {
                     "name": "Claude 3.5 系列",

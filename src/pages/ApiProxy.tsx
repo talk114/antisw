@@ -313,10 +313,38 @@ export default function ApiProxy() {
                 const status = await invoke<typeof cfStatus>('cloudflared_start', { config });
                 setCfStatus(status);
                 showToast(t('proxy.cloudflared.started', { defaultValue: 'Tunnel started' }), 'success');
+
+                // 持久化“启用”状态
+                if (appConfig) {
+                    const newConfig = {
+                        ...appConfig,
+                        cloudflared: {
+                            ...appConfig.cloudflared,
+                            enabled: true,
+                            mode: cfMode,
+                            token: cfToken,
+                            use_http2: cfUseHttp2,
+                            port: appConfig.proxy.port || 8045
+                        }
+                    };
+                    saveConfig(newConfig);
+                }
             } else {
                 const status = await invoke<typeof cfStatus>('cloudflared_stop');
                 setCfStatus(status);
                 showToast(t('proxy.cloudflared.stopped', { defaultValue: 'Tunnel stopped' }), 'success');
+
+                // 持久化“禁用”状态
+                if (appConfig) {
+                    const newConfig = {
+                        ...appConfig,
+                        cloudflared: {
+                            ...appConfig.cloudflared,
+                            enabled: false
+                        }
+                    };
+                    saveConfig(newConfig);
+                }
             }
         } catch (error) {
             showToast(String(error), 'error');
@@ -381,6 +409,20 @@ export default function ApiProxy() {
         try {
             const config = await invoke<AppConfig>('load_config');
             setAppConfig(config);
+
+            // 恢复 Cloudflared 持久化状态
+            if (config.cloudflared) {
+                setCfMode(config.cloudflared.mode || 'quick');
+                setCfToken(config.cloudflared.token || '');
+                setCfUseHttp2(config.cloudflared.use_http2 !== false); // 默认开启 HTTP/2
+            }
+
+            // 恢复 Cloudflared 状态并实现持久化同步
+            if (config.cloudflared) {
+                setCfMode(config.cloudflared.mode || 'quick');
+                setCfToken(config.cloudflared.token || '');
+                setCfUseHttp2(config.cloudflared.use_http2 !== false); // 默认 true
+            }
         } catch (error) {
             console.error('加载配置失败:', error);
             setConfigError(String(error));
@@ -469,14 +511,13 @@ export default function ApiProxy() {
             name: t('proxy.router.preset_default'),
             description: t('proxy.router.preset_default_desc'),
             mappings: {
-                "gpt-4*": "gemini-3-pro-high",
+                "gpt-4*": "gemini-3.1-pro-high",
                 "gpt-4o*": "gemini-3-flash",
                 "gpt-3.5*": "gemini-2.5-flash",
-                "o1-*": "gemini-3-pro-high",
-                "o3-*": "gemini-3-pro-high",
-                "claude-3-5-sonnet-*": "claude-sonnet-4-5",
+                "o1-*": "gemini-3.1-pro-high",
+                "o3-*": "gemini-3.1-pro-high",
+                "claude-3-5-sonnet-*": "claude-sonnet-4-6",
                 "claude-3-opus-*": "claude-opus-4-6-thinking",
-                "claude-opus-4-5*": "claude-opus-4-5-thinking",
                 "claude-opus-4-6*": "claude-opus-4-6-thinking",
                 "claude-haiku-*": "gemini-2.5-flash",
                 "claude-3-haiku-*": "gemini-2.5-flash",
@@ -488,16 +529,15 @@ export default function ApiProxy() {
             description: t('proxy.router.preset_performance_desc'),
             mappings: {
                 "gpt-4*": "claude-opus-4-6-thinking",
-                "gpt-4o*": "claude-sonnet-4-5",
+                "gpt-4o*": "claude-sonnet-4-6",
                 "gpt-3.5*": "gemini-3-flash",
                 "o1-*": "claude-opus-4-6-thinking",
                 "o3-*": "claude-opus-4-6-thinking",
-                "claude-3-5-sonnet-*": "claude-sonnet-4-5",
+                "claude-3-5-sonnet-*": "claude-sonnet-4-6",
                 "claude-3-opus-*": "claude-opus-4-6-thinking",
-                "claude-opus-4-5*": "claude-opus-4-5-thinking",
                 "claude-opus-4-6*": "claude-opus-4-6-thinking",
-                "claude-haiku-*": "claude-sonnet-4-5",
-                "claude-3-haiku-*": "claude-sonnet-4-5",
+                "claude-haiku-*": "claude-sonnet-4-6",
+                "claude-3-haiku-*": "claude-sonnet-4-6",
             }
         },
         {
@@ -522,14 +562,14 @@ export default function ApiProxy() {
             name: t('proxy.router.preset_balanced'),
             description: t('proxy.router.preset_balanced_desc'),
             mappings: {
-                "gpt-4*": "gemini-3-pro-high",
+                "gpt-4*": "gemini-3.1-pro-high",
                 "gpt-4o*": "gemini-3-flash",
                 "gpt-3.5*": "gemini-2.5-flash",
-                "o1-*": "claude-sonnet-4-5",
-                "o3-*": "claude-sonnet-4-5",
-                "claude-3-5-sonnet-*": "claude-sonnet-4-5",
-                "claude-3-opus-*": "gemini-3-pro-high",
-                "claude-opus-4-5*": "gemini-3-pro-high",
+                "o1-*": "claude-sonnet-4-6",
+                "o3-*": "claude-sonnet-4-6",
+                "claude-3-5-sonnet-*": "claude-sonnet-4-6",
+                "claude-3-opus-*": "gemini-3.1-pro-high",
+                "claude-opus-4-5*": "gemini-3.1-pro-high",
                 "claude-opus-4-6*": "claude-opus-4-6-thinking", // Balanced: Keep 4.6 as itself (or map to high?) Let's map to itself for now to utilize header
                 "claude-haiku-*": "gemini-2.5-flash",
                 "claude-3-haiku-*": "gemini-2.5-flash",
@@ -919,21 +959,21 @@ export default function ApiProxy() {
         // 1. Anthropic Protocol
         if (selectedProtocol === 'anthropic') {
             return `from anthropic import Anthropic
- 
- client = Anthropic(
-     # 推荐使用 127.0.0.1
-     base_url="${`http://127.0.0.1:${port}`}",
-     api_key="${apiKey}"
- )
- 
- # 注意: Antigravity 支持使用 Anthropic SDK 调用任意模型
- response = client.messages.create(
-     model="${modelId}",
-     max_tokens=1024,
-     messages=[{"role": "user", "content": "Hello"}]
- )
- 
- print(response.content[0].text)`;
+
+client = Anthropic(
+    # 推荐使用 127.0.0.1
+    base_url="${`http://127.0.0.1:${port}`}",
+    api_key="${apiKey}"
+)
+
+# 注意: Antigravity 支持使用 Anthropic SDK 调用任意模型
+response = client.messages.create(
+    model="${modelId}",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+print(response.content[0].text)`;
         }
 
         // 2. Gemini Protocol (Native)
@@ -957,43 +997,43 @@ print(response.text)`;
         // 3. OpenAI Protocol
         if (modelId.startsWith('gemini-3-pro-image')) {
             return `from openai import OpenAI
- 
- client = OpenAI(
-     base_url="${baseUrl}",
-     api_key="${apiKey}"
- )
- 
- response = client.chat.completions.create(
-     model="${modelId}",
-     # 方式 1: 使用 size 参数 (推荐)
-     # 支持: "1024x1024" (1:1), "1280x720" (16:9), "720x1280" (9:16), "1216x896" (4:3)
-     extra_body={ "size": "1024x1024" },
-     
-     # 方式 2: 使用模型后缀
-     # 例如: gemini-3-pro-image-16-9, gemini-3-pro-image-4-3
-     # model="gemini-3-pro-image-16-9",
-     messages=[{
-         "role": "user",
-         "content": "Draw a futuristic city"
-     }]
- )
- 
- print(response.choices[0].message.content)`;
+
+client = OpenAI(
+    base_url="${baseUrl}",
+    api_key="${apiKey}"
+)
+
+response = client.chat.completions.create(
+    model="${modelId}",
+    # 方式 1: 使用 size 参数 (推荐)
+    # 支持: "1024x1024" (1:1), "1280x720" (16:9), "720x1280" (9:16), "1216x896" (4:3)
+    extra_body={ "size": "1024x1024" },
+    
+    # 方式 2: 使用模型后缀
+    # 例如: gemini-3-pro-image-16-9, gemini-3-pro-image-4-3
+    # model="gemini-3-pro-image-16-9",
+    messages=[{
+        "role": "user",
+        "content": "Draw a futuristic city"
+    }]
+)
+
+print(response.choices[0].message.content)`;
         }
 
         return `from openai import OpenAI
- 
- client = OpenAI(
-     base_url="${baseUrl}",
-     api_key="${apiKey}"
- )
- 
- response = client.chat.completions.create(
-     model="${modelId}",
-     messages=[{"role": "user", "content": "Hello"}]
- )
- 
- print(response.choices[0].message.content)`;
+
+client = OpenAI(
+    base_url="${baseUrl}",
+    api_key="${apiKey}"
+)
+
+response = client.chat.completions.create(
+    model="${modelId}",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+print(response.choices[0].message.content)`;
     };
 
     // 在 filter 逻辑中，当选择 openai 协议时，允许显示所有模型
@@ -2034,7 +2074,15 @@ print(response.text)`;
                                                 {/* 隧道模式选择 */}
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <button
-                                                        onClick={() => setCfMode('quick')}
+                                                        onClick={() => {
+                                                            setCfMode('quick');
+                                                            if (appConfig) {
+                                                                saveConfig({
+                                                                    ...appConfig,
+                                                                    cloudflared: { ...appConfig.cloudflared, mode: 'quick' }
+                                                                });
+                                                            }
+                                                        }}
                                                         disabled={cfStatus.running}
                                                         className={cn(
                                                             "p-3 rounded-lg border-2 text-left transition-all",
@@ -2052,7 +2100,15 @@ print(response.text)`;
                                                         </p>
                                                     </button>
                                                     <button
-                                                        onClick={() => setCfMode('auth')}
+                                                        onClick={() => {
+                                                            setCfMode('auth');
+                                                            if (appConfig) {
+                                                                saveConfig({
+                                                                    ...appConfig,
+                                                                    cloudflared: { ...appConfig.cloudflared, mode: 'auth' }
+                                                                });
+                                                            }
+                                                        }}
                                                         disabled={cfStatus.running}
                                                         className={cn(
                                                             "p-3 rounded-lg border-2 text-left transition-all",
@@ -2081,6 +2137,14 @@ print(response.text)`;
                                                             type="password"
                                                             value={cfToken}
                                                             onChange={(e) => setCfToken(e.target.value)}
+                                                            onBlur={() => {
+                                                                if (appConfig) {
+                                                                    saveConfig({
+                                                                        ...appConfig,
+                                                                        cloudflared: { ...appConfig.cloudflared, token: cfToken }
+                                                                    });
+                                                                }
+                                                            }}
                                                             disabled={cfStatus.running}
                                                             placeholder="eyJhIjoiNj..."
                                                             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-base-200 text-sm font-mono disabled:opacity-60"
@@ -2102,7 +2166,20 @@ print(response.text)`;
                                                         type="checkbox"
                                                         className="toggle toggle-sm"
                                                         checked={cfUseHttp2}
-                                                        onChange={(e) => setCfUseHttp2(e.target.checked)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.checked;
+                                                            setCfUseHttp2(val);
+                                                            if (appConfig) {
+                                                                const newConfig = {
+                                                                    ...appConfig,
+                                                                    cloudflared: {
+                                                                        ...appConfig.cloudflared,
+                                                                        use_http2: val
+                                                                    }
+                                                                };
+                                                                saveConfig(newConfig);
+                                                            }
+                                                        }}
                                                         disabled={cfStatus.running}
                                                     />
                                                 </div>

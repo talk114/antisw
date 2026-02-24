@@ -33,6 +33,7 @@ pub struct ProxyToken {
     pub reset_time: Option<i64>,           // [NEW] 配额刷新时间戳（用于排序优化）
     pub validation_blocked: bool,          // [NEW] Check for validation block (VALIDATION_REQUIRED temporary block)
     pub validation_blocked_until: i64,     // [NEW] Timestamp until which the account is blocked
+    pub validation_url: Option<String>,    // [NEW] Validation URL (#1522)
     pub model_quotas: HashMap<String, i32>, // [OPTIMIZATION] In-memory cache for model-specific quotas
 }
 
@@ -453,6 +454,7 @@ impl TokenManager {
         let project_id = token_obj
             .get("project_id")
             .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
         // 【新增】提取订阅等级 (subscription_tier 为 "FREE" | "PRO" | "ULTRA")
@@ -514,6 +516,7 @@ impl TokenManager {
             reset_time,
             validation_blocked: account.get("validation_blocked").and_then(|v| v.as_bool()).unwrap_or(false),
             validation_blocked_until: account.get("validation_blocked_until").and_then(|v| v.as_i64()).unwrap_or(0),
+            validation_url: account.get("validation_url").and_then(|v| v.as_str()).map(|s| s.to_string()),
             model_quotas,
         }))
     }
@@ -1200,9 +1203,14 @@ impl TokenManager {
                         }
                     }
 
-                    // 确保有 project_id
+                    // 确保有 project_id (filter empty strings to trigger re-fetch)
                     let project_id = if let Some(pid) = &token.project_id {
-                        pid.clone()
+                        if pid.is_empty() { None } else { Some(pid.clone()) }
+                    } else {
+                        None
+                    };
+                    let project_id = if let Some(pid) = project_id {
+                        pid
                     } else {
                         match crate::proxy::project_resolver::fetch_project_id(&token.access_token)
                             .await
@@ -1565,9 +1573,14 @@ impl TokenManager {
                 }
             }
 
-            // 4. 确保有 project_id
+            // 4. 确保有 project_id (filter empty strings to trigger re-fetch)
             let project_id = if let Some(pid) = &token.project_id {
-                pid.clone()
+                if pid.is_empty() { None } else { Some(pid.clone()) }
+            } else {
+                None
+            };
+            let project_id = if let Some(pid) = project_id {
+                pid
             } else {
                 tracing::debug!("账号 {} 缺少 project_id，尝试获取...", token.email);
                 match crate::proxy::project_resolver::fetch_project_id(&token.access_token).await {
@@ -1579,23 +1592,12 @@ impl TokenManager {
                         pid
                     }
                     Err(e) => {
-                        tracing::error!("Failed to fetch project_id for {}: {}", token.email, e);
-                        last_error = Some(format!(
-                            "Failed to fetch project_id for {}: {}",
+                        tracing::warn!(
+                            "Failed to fetch project_id for {}, using fallback: {}",
                             token.email, e
-                        ));
-                        attempted.insert(token.account_id.clone());
-
-                        // 【优化】标记需要清除锁定，避免在循环内加锁
-                        if quota_group != "image_gen" {
-                            if matches!(&last_used_account_id, Some((id, _)) if id == &token.account_id)
-                            {
-                                need_update_last_used =
-                                    Some((String::new(), std::time::Instant::now()));
-                                // 空字符串表示需要清除
-                            }
-                        }
-                        continue;
+                        );
+                        // [FIX #1794] 为 503 问题提供稳定兜底，不跳过该账号
+                        "bamboo-precept-lgxtn".to_string()
                     }
                 }
             };
@@ -1736,7 +1738,9 @@ impl TokenManager {
             None => return Err(format!("未找到账号: {}", email)),
         };
 
-        let project_id = project_id_opt.unwrap_or_else(|| "bamboo-precept-lgxtn".to_string());
+        let project_id = project_id_opt
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "bamboo-precept-lgxtn".to_string());
 
         // 检查是否过期 (提前5分钟)
         if now < timestamp + expires_in - 300 {
@@ -2388,6 +2392,39 @@ impl TokenManager {
         account["validation_blocked_until"] = serde_json::Value::Number(serde_json::Number::from(block_until));
         account["validation_blocked_reason"] = serde_json::Value::String(reason.to_string());
 
+        // [NEW] 尝试从消息中提取验证链接 (#1522)
+        let extracted_url = if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(reason) {
+             // 尝试从特定的 Google RPC error 结构中取
+             let mut url = None;
+             if let Some(details) = parsed_json.pointer("/error/details") {
+                 if let Some(arr) = details.as_array() {
+                     for detail in arr {
+                         if let Some(meta) = detail.get("metadata") {
+                             if let Some(v_url) = meta.get("validation_url").and_then(|v| v.as_str()) {
+                                 url = Some(v_url.to_string());
+                                 break;
+                             }
+                         }
+                     }
+                 }
+             }
+             url
+        } else {
+             // 回退方案：通过更严格的正则及反序列化解码可能的 \u0026
+             let url_regex = regex::Regex::new(r#"https://[^\s"'\\]+"#).unwrap();
+             url_regex.find(reason).map(|m| {
+                 let raw_url = m.as_str().to_string();
+                 raw_url.replace("\\u0026", "&")
+             })
+        };
+        
+        if let Some(url) = extracted_url {
+             account["validation_url"] = serde_json::Value::String(url.clone());
+             if let Some(mut token) = self.tokens.get_mut(account_id) {
+                 token.validation_url = Some(url);
+             }
+        }
+
         // Clear sticky session if blocked
         self.session_accounts.retain(|_, v| *v != account_id);
 
@@ -2429,12 +2466,14 @@ impl TokenManager {
         // Update quota.is_forbidden
         if let Some(quota) = account.get_mut("quota") {
             quota["is_forbidden"] = serde_json::Value::Bool(true);
+            quota["forbidden_reason"] = serde_json::Value::String(reason.to_string());
         } else {
             // Create quota object if not exists
             account["quota"] = serde_json::json!({
                 "models": [],
                 "last_updated": chrono::Utc::now().timestamp(),
-                "is_forbidden": true
+                "is_forbidden": true,
+                "forbidden_reason": reason
             });
         }
 
@@ -2453,7 +2492,7 @@ impl TokenManager {
         tracing::warn!(
             "🚫 Account {} marked as forbidden (403): {}",
             account_id,
-            truncate_reason(reason, 100)
+            truncate_reason(reason, 1000) // [FIX] 放宽日志显示限制到 1000
         );
 
         Ok(())
@@ -2465,7 +2504,14 @@ fn truncate_reason(reason: &str, max_len: usize) -> String {
     if reason.len() <= max_len {
         reason.to_string()
     } else {
-        format!("{}...", &reason[..max_len - 3])
+        // [FIX] 确保字符截断在有效边界，防止 panic
+        let end = reason
+            .char_indices()
+            .map(|(i, _)| i)
+            .filter(|&i| i <= max_len - 3)
+            .last()
+            .unwrap_or(0);
+        format!("{}...", &reason[..end])
     }
 }
 

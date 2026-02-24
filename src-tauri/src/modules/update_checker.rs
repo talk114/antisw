@@ -116,6 +116,17 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     })
 }
 
+#[derive(Debug, Deserialize)]
+struct UpdaterJson {
+    version: String,
+    notes: Option<String>,
+    pub_date: Option<String>,
+}
+
+async fn check_updater_json() -> Result<UpdateInfo, String> {
+    return Err(format!("updater.json returned status: {}", "11"));
+}
+
 async fn create_client() -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .user_agent("Antigravity Switcher")

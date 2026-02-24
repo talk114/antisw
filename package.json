@@ -1,6 +1,6 @@
 {
-  "version": "4.1.13",
-  "name": "antigravity-sw",
+  "version": "4.1.22",
+  "name": "antigravity-tools",
   "type": "module",
   "private": true,
   "scripts": {
