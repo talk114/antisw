@@ -20,7 +20,7 @@ function Navbar() {
     // 创建导航项(包含翻译后的标签)
     const navItems: NavItem[] = [
         { path: '/', label: t('nav.accounts'), icon: Users, priority: 'high' },
-        { path: '/settings', label: t('nav.settings'), icon: Settings, priority: 'high' },
+        { path: '/settings', label: t('settings.tabs.about'), icon: Settings, priority: 'high' },
     ];
 
     // 主题切换逻辑(带 View Transition 动画)
