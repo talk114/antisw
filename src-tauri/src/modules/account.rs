@@ -323,7 +323,7 @@ mod tests {
 static ACCOUNT_INDEX_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 // ... existing constants ...
-const DATA_DIR: &str = ".antigravity_sw";
+const DATA_DIR: &str = ".antisw";
 const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
 
@@ -377,8 +377,14 @@ fn load_account_index_in_dir(data_dir: &PathBuf) -> Result<AccountIndex, String>
         return Ok(recovered);
     }
 
-    let raw_content = fs::read(&index_path)
+    let raw_bytes = fs::read(&index_path)
         .map_err(|e| format!("failed_to_read_account_index: {}", e))?;
+
+    // Decrypt content (backward compat: if not encrypted, returns as-is)
+    let raw_content = String::from_utf8_lossy(&raw_bytes).into_owned();
+    let raw_content_decrypted = crate::utils::crypto::decrypt_file_content(&raw_content);
+    let raw_content_bytes = raw_content_decrypted.as_bytes().to_vec();
+    let raw_content = raw_content_bytes;
 
     // If file is empty, attempt recovery
     if raw_content.is_empty() {
@@ -433,6 +439,7 @@ fn save_account_index_in_dir(data_dir: &PathBuf, index: &AccountIndex) -> Result
 
     let content = serde_json::to_string_pretty(index)
         .map_err(|e| format!("failed_to_serialize_account_index: {}", e))?;
+    let content = crate::utils::crypto::encrypt_file_content(&content);;
 
     // Write to temporary file
     if let Err(e) = fs::write(&temp_path, content) {
@@ -511,8 +518,9 @@ fn rebuild_index_from_accounts_in_dir(data_dir: &PathBuf) -> Result<AccountIndex
 
 /// Load account from a specific path (internal helper)
 fn load_account_at_path(account_path: &PathBuf) -> Result<Account, String> {
-    let content = fs::read_to_string(account_path)
+    let raw = fs::read_to_string(account_path)
         .map_err(|e| format!("failed_to_read_account_data: {}", e))?;
+    let content = crate::utils::crypto::decrypt_file_content(&raw);
     serde_json::from_str(&content).map_err(|e| format!("failed_to_parse_account_data: {}", e))
 }
 
@@ -656,6 +664,7 @@ pub fn save_account(account: &Account) -> Result<(), String> {
 
     let content = serde_json::to_string_pretty(account)
         .map_err(|e| format!("failed_to_serialize_account_data: {}", e))?;
+    let content = crate::utils::crypto::encrypt_file_content(&content);
 
     fs::write(&account_path, content).map_err(|e| format!("failed_to_save_account_data: {}", e))
 }

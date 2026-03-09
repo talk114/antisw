@@ -1,14 +1,9 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 import Layout from './components/layout/Layout';
-import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Settings from './pages/Settings';
-import Monitor from './pages/Monitor';
-import TokenStats from './pages/TokenStats';
-import Security from './pages/Security';
 import ThemeManager from './components/common/ThemeManager';
-import UserToken from './pages/UserToken';
 import { UpdateNotification } from './components/UpdateNotification';
 import DebugConsole from './components/debug/DebugConsole';
 import { useEffect } from 'react';
@@ -29,31 +24,7 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Dashboard />,
-      },
-      {
-        path: 'accounts',
         element: <Accounts />,
-      },
-      // {
-      //   path: 'api-proxy',
-      //   element: <ApiProxy />,
-      // },
-      {
-        path: 'monitor',
-        element: <Monitor />,
-      },
-      {
-        path: 'token-stats',
-        element: <TokenStats />,
-      },
-      {
-        path: 'user-token',
-        element: <UserToken />,
-      },
-      {
-        path: 'security',
-        element: <Security />,
       },
       {
         path: 'settings',

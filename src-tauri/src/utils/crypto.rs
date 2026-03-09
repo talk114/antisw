@@ -111,6 +111,38 @@ pub fn decrypt_string(encrypted: &str) -> Result<String, String> {
     }
 }
 
+/// Encrypt file content for storage. On error, returns original plaintext (safe fallback).
+pub fn encrypt_file_content(plaintext: &str) -> String {
+    match encrypt_string(plaintext) {
+        Ok(encrypted) => encrypted,
+        Err(e) => {
+            tracing::warn!("File encryption failed, saving as plaintext: {}", e);
+            plaintext.to_string()
+        }
+    }
+}
+
+/// Decrypt file content from storage. On error, returns original raw content (backward compat).
+pub fn decrypt_file_content(raw: &str) -> String {
+    let to_decrypt = raw.trim();
+    if to_decrypt.is_empty() {
+        return raw.to_string();
+    }
+    // Only attempt decryption if it looks like our encrypted format
+    if to_decrypt.starts_with(ENCRYPTED_PREFIX) {
+        match decrypt_string(to_decrypt) {
+            Ok(plaintext) => plaintext,
+            Err(e) => {
+                tracing::warn!("File decryption failed, returning raw content: {}", e);
+                raw.to_string()
+            }
+        }
+    } else {
+        // Not encrypted (old file) — return as-is for backward compatibility
+        raw.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,7 +151,7 @@ mod tests {
     fn test_encrypt_decrypt_cycle() {
         let password = "my_secret_password";
         let encrypted = encrypt_string(password).unwrap();
-        
+
         assert!(encrypted.starts_with(ENCRYPTED_PREFIX));
         assert_ne!(password, encrypted);
 

@@ -15,7 +15,7 @@ interface AccountRowProps {
     onRefresh: () => void;
     onViewDevice: () => void;
     onViewDetails: () => void;
-    onExport: () => void;
+    onExport?: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
 }
@@ -343,13 +343,15 @@ function AccountRow({ account, selected, onSelect, isCurrent, isRefreshing, isSw
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     </button>
-                    <button
-                        className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
-                        onClick={(e) => { e.stopPropagation(); onExport(); }}
-                        title={t('common.export')}
-                    >
-                        <Download className="w-3.5 h-3.5" />
-                    </button>
+                    {onExport && (
+                        <button
+                            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
+                            onClick={(e) => { e.stopPropagation(); onExport(); }}
+                            title={t('common.export')}
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                     <button
                         className={cn(
                             "p-1.5 rounded-lg transition-all",

@@ -67,7 +67,7 @@ interface AccountTableProps {
     onRefresh: (accountId: string) => void;
     onViewDevice: (accountId: string) => void;
     onViewDetails: (accountId: string) => void;
-    onExport: (accountId: string) => void;
+    onExport?: (accountId: string) => void;
     onDelete: (accountId: string) => void;
     onToggleProxy: (accountId: string) => void;
     onWarmup?: (accountId: string) => void;
@@ -89,7 +89,7 @@ interface SortableRowProps {
     onRefresh: () => void;
     onViewDevice: () => void;
     onViewDetails: () => void;
-    onExport: () => void;
+    onExport?: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
     onWarmup?: () => void;
@@ -107,7 +107,7 @@ interface AccountRowContentProps {
     onRefresh: () => void;
     onViewDevice: () => void;
     onViewDetails: () => void;
-    onExport: () => void;
+    onExport?: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
     onWarmup?: () => void;
@@ -635,13 +635,15 @@ function AccountRowContent({
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     </button>
-                    <button
-                        className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
-                        onClick={(e) => { e.stopPropagation(); onExport(); }}
-                        title={t('common.export')}
-                    >
-                        <Download className="w-3.5 h-3.5" />
-                    </button>
+                    {onExport && (
+                        <button
+                            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
+                            onClick={(e) => { e.stopPropagation(); onExport(); }}
+                            title={t('common.export')}
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                     <button
                         className={cn(
                             "p-1.5 rounded-lg transition-all",
@@ -790,7 +792,7 @@ function AccountTable({
                                     onRefresh={() => onRefresh(account.id)}
                                     onViewDevice={() => onViewDevice(account.id)}
                                     onViewDetails={() => onViewDetails(account.id)}
-                                    onExport={() => onExport(account.id)}
+                                    onExport={onExport ? () => onExport(account.id) : undefined}
                                     onDelete={() => onDelete(account.id)}
                                     onToggleProxy={() => onToggleProxy(account.id)}
                                     onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}

@@ -1,7 +1,6 @@
 
 
 import {
-  Download,
   LayoutGrid,
   List,
   RefreshCw,
@@ -11,6 +10,7 @@ import {
   ToggleRight,
   Trash2,
   Upload,
+  Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccountDetailsDialog from "../components/accounts/AccountDetailsDialog";
@@ -22,7 +22,7 @@ import ModalDialog from "../components/common/ModalDialog";
 import Pagination from "../components/common/Pagination";
 import AccountErrorDialog from "../components/accounts/AccountErrorDialog";
 import { showToast } from "../components/common/ToastContainer";
-import { exportAccounts } from "../services/accountService";
+
 import { useAccountStore } from "../stores/useAccountStore";
 import { useConfigStore } from "../stores/useConfigStore";
 import { Account } from "../types/account";
@@ -41,6 +41,7 @@ function Accounts() {
     accounts,
     currentAccount,
     fetchAccounts,
+    fetchCurrentAccount,
     addAccount,
     deleteAccount,
     deleteAccounts,
@@ -227,6 +228,39 @@ function Accounts() {
   useEffect(() => {
     fetchAccounts();
   }, []);
+
+  // Listen for VNPAY SSO events
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const setupListeners = async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+
+      const unlistenAccounts = await listen('vnpay-sso-accounts-received', (event: any) => {
+        const accounts = event.payload as Array<{ email: string; refresh_token: string }>;
+        console.log('[Accounts] Received VNPAY SSO accounts:', accounts.length);
+        showToast(`Received ${accounts.length} VNPAY account(s)`, 'info');
+      });
+
+      const unlistenCompleted = await listen('vnpay-sso-import-completed', () => {
+        console.log('[Accounts] VNPAY SSO import completed');
+        showToast('VNPAY accounts imported successfully', 'success');
+        // Refresh account list
+        fetchAccounts();
+        fetchCurrentAccount();
+      });
+
+      return () => {
+        unlistenAccounts();
+        unlistenCompleted();
+      };
+    };
+
+    const cleanup = setupListeners();
+    return () => {
+      cleanup.then(fn => fn && fn());
+    };
+  }, [fetchAccounts, fetchCurrentAccount]);
 
   // Reset pagination when view mode changes to avoid empty pages or confusion
   useEffect(() => {
@@ -528,91 +562,7 @@ function Accounts() {
     }
   };
 
-  const exportAccountsToJson = async (accountsToExport: Account[]) => {
-    try {
-      if (accountsToExport.length === 0) {
-        showToast(t("dashboard.toast.export_no_accounts"), "warning");
-        return;
-      }
 
-      // 1. Get export data from API (contains refresh_token)
-      const accountIds = accountsToExport.map((acc) => acc.id);
-      const response = await exportAccounts(accountIds);
-
-      if (!response.accounts || response.accounts.length === 0) {
-        showToast(t("dashboard.toast.export_no_accounts"), "warning");
-        return;
-      }
-
-      const exportData = response.accounts;
-      const content = JSON.stringify(exportData, null, 2);
-      const fileName = `antigravity_accounts_${new Date().toISOString().split("T")[0]}.json`;
-
-      // 2. Determine Path & Export
-      if (isTauri()) {
-        let path: string | null = null;
-        const { join } = await import("@tauri-apps/api/path");
-
-        if (config?.default_export_path) {
-          // Use default path
-          path = await join(config.default_export_path, fileName);
-        } else {
-          // Use Native Dialog
-          const { save } = await import("@tauri-apps/plugin-dialog");
-          path = await save({
-            filters: [
-              {
-                name: "JSON",
-                extensions: ["json"],
-              },
-            ],
-            defaultPath: fileName,
-          });
-        }
-
-        if (!path) return; // Cancelled
-
-        // 3. Write File
-        await invoke("save_text_file", { path, content });
-        showToast(`${t("common.success")} ${path}`, "success");
-      } else {
-        // Web 模式：使用浏览器下载
-        const blob = new Blob([content], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast(
-          t("dashboard.toast.export_success", { path: fileName }),
-          "success",
-        );
-      }
-    } catch (error: any) {
-      console.error("Export failed:", error);
-      showToast(`${t("common.error")}: ${error}`, "error");
-    }
-  };
-
-  const handleExport = () => {
-    const idsToExport =
-      selectedIds.size > 0
-        ? Array.from(selectedIds)
-        : accounts.map((a) => a.id);
-
-    const accountsToExport = accounts.filter((a) => idsToExport.includes(a.id));
-    exportAccountsToJson(accountsToExport);
-  };
-
-  const handleExportOne = (accountId: string) => {
-    const account = accounts.find((a) => a.id === accountId);
-    if (account) {
-      exportAccountsToJson([account]);
-    }
-  };
 
   const processImportData = async (content: string) => {
     let importData: Array<{ email?: string; refresh_token?: string }>;
@@ -914,6 +864,33 @@ function Accounts() {
 
         {/* 操作按钮组 */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            className="px-2.5 py-2 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 shadow-sm"
+            onClick={async () => {
+              try {
+                // Prepare VNPAY SSO listener and get dynamic port
+                const port = await invoke<number>('prepare_vnpay_sso_listener');
+
+                const callbackUrl = `http://localhost:${port}/sso-callback`;
+                const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?urlcallback=${encodeURIComponent(callbackUrl)}`;
+
+                // Open in default browser using opener plugin
+                if (isTauri()) {
+                  const { openUrl } = await import('@tauri-apps/plugin-opener');
+                  await openUrl(vnpayAuthUrl);
+                } else {
+                  window.open(vnpayAuthUrl, '_blank');
+                }
+              } catch (error) {
+                console.error('Failed to prepare SSO VNPAY:', error);
+                showToast(`SSO VNPAY error: ${error}`, 'error');
+              }
+            }}
+          >
+            <Users className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden lg:inline">SSO VNPAY</span>
+          </button>
+
           <AddAccountDialog onAdd={handleAddAccount} showText={false} />
 
           {selectedIds.size > 0 && (
@@ -1029,22 +1006,6 @@ function Accounts() {
             </span>
           </button>
 
-          <button
-            className="px-2.5 py-2 border border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-base-200 transition-colors flex items-center gap-1.5"
-            onClick={handleExport}
-            title={
-              selectedIds.size > 0
-                ? t("accounts.export_selected", { count: selectedIds.size })
-                : t("common.export")
-            }
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">
-              {selectedIds.size > 0
-                ? t("accounts.export_selected", { count: selectedIds.size })
-                : t("common.export")}
-            </span>
-          </button>
         </div>
       </div>
 
@@ -1065,7 +1026,6 @@ function Accounts() {
                 onRefresh={handleRefresh}
                 onViewDevice={handleViewDevice}
                 onViewDetails={handleViewDetails}
-                onExport={handleExportOne}
                 onDelete={handleDelete}
                 onToggleProxy={(id) =>
                   handleToggleProxy(
@@ -1093,7 +1053,7 @@ function Accounts() {
               onRefresh={handleRefresh}
               onViewDevice={handleViewDevice}
               onViewDetails={handleViewDetails}
-              onExport={handleExportOne}
+
               onDelete={handleDelete}
               onToggleProxy={(id) =>
                 handleToggleProxy(

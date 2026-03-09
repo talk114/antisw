@@ -13,7 +13,7 @@ interface AccountGridProps {
     onRefresh: (accountId: string) => void;
     onViewDevice: (accountId: string) => void;
     onViewDetails: (accountId: string) => void;
-    onExport: (accountId: string) => void;
+    onExport?: (accountId: string) => void;
     onDelete: (accountId: string) => void;
     onToggleProxy: (accountId: string) => void;
     onWarmup?: (accountId: string) => void;
@@ -48,7 +48,7 @@ function AccountGrid({ accounts, selectedIds, refreshingIds, onToggleSelect, cur
                     onRefresh={() => onRefresh(account.id)}
                     onViewDevice={() => onViewDevice(account.id)}
                     onViewDetails={() => onViewDetails(account.id)}
-                    onExport={() => onExport(account.id)}
+                    onExport={onExport ? () => onExport(account.id) : undefined}
                     onDelete={() => onDelete(account.id)}
                     onToggleProxy={() => onToggleProxy(account.id)}
                     onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}
