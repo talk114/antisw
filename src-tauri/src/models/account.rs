@@ -1,6 +1,6 @@
+use super::{quota::QuotaData, token::TokenData};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use super::{token::TokenData, quota::QuotaData};
 
 /// 账号数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +60,15 @@ pub struct Account {
     /// 用户自定义标签
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_label: Option<String>,
+    /// Account type, e.g. "anthropic" for Claude accounts
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_type: Option<String>,
+    /// Anthropic API auth token (only for anthropic accounts)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anthropic_auth_token: Option<String>,
+    /// Anthropic base URL (only for anthropic accounts)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anthropic_base_url: Option<String>,
 }
 
 impl Account {
@@ -89,6 +98,9 @@ impl Account {
             proxy_id: None,
             proxy_bound_at: None,
             custom_label: None,
+            account_type: None,
+            anthropic_auth_token: None,
+            anthropic_base_url: None,
         }
     }
 

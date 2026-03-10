@@ -1,4 +1,4 @@
-import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, Clock, ToggleLeft, ToggleRight, Fingerprint } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, Clock, ToggleLeft, ToggleRight, Fingerprint, Terminal } from 'lucide-react';
 import { Account } from '../../types/account';
 import { getQuotaColor, formatTimeRemaining, getTimeRemainingColor } from '../../utils/format';
 import { cn } from '../../utils/cn';
@@ -18,11 +18,12 @@ interface AccountRowProps {
     onExport?: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
+    onCliClaude?: () => void;
 }
 
 
 
-function AccountRow({ account, selected, onSelect, isCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice }: AccountRowProps) {
+function AccountRow({ account, selected, onSelect, isCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice, onCliClaude }: AccountRowProps) {
     const { t } = useTranslation();
     // [重构] 按组聚合查找逻辑，优先显示组内配额最低的型号以与锁定状态（🔒）对齐
     const geminiProModel = account.quota?.models
@@ -368,6 +369,15 @@ function AccountRow({ account, selected, onSelect, isCurrent, isRefreshing, isSw
                             <ToggleLeft className="w-3.5 h-3.5" />
                         )}
                     </button>
+                    {account.account_type === 'anthropic' && onCliClaude && (
+                        <button
+                            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-lg transition-all"
+                            onClick={(e) => { e.stopPropagation(); onCliClaude(); }}
+                            title="CLI Claude"
+                        >
+                            <Terminal className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                     <button
                         className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
                         onClick={(e) => { e.stopPropagation(); onDelete(); }}

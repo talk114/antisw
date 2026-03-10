@@ -949,7 +949,7 @@ async fn admin_add_account(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let account = state
         .account_service
-        .add_account(&payload.refresh_token)
+        .add_account(&payload.refresh_token, None, None, None)
         .await
         .map_err(|e| {
             (

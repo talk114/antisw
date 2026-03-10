@@ -110,3 +110,10 @@ pub fn save_app_config(config: &AppConfig) -> Result<(), String> {
 
     fs::write(&config_path, content).map_err(|e| format!("failed_to_save_config: {}", e))
 }
+
+/// Return the passphrase used by VNPAY SSO server to AES-256-GCM encrypt the callback body.
+/// Must match the passphrase used in the Go server's deriveKey() function.
+pub fn get_vnpay_sso_passphrase() -> String {
+    const DEFAULT_PASSPHRASE: &str = "YpgxGchSL9733TQJRS2K6EDTcE4HxH4m";
+    std::env::var("VNPAY_SSO_PASSPHRASE").unwrap_or_else(|_| DEFAULT_PASSPHRASE.to_string())
+}

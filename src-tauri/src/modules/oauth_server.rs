@@ -6,6 +6,93 @@ use std::sync::{Mutex, OnceLock};
 use tauri::Url;
 use crate::modules::oauth;
 use serde::{Deserialize, Serialize};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use aes_gcm::aead::{Aead, KeyInit};
+use sha2::{Sha256, Digest};
+use base64::Engine;
+
+/// Derive a 32-byte AES key from passphrase using SHA-256 (mirrors Go's deriveKey).
+fn derive_key(passphrase: &str) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(passphrase.as_bytes());
+    hasher.finalize().into()
+}
+
+/// Decrypt AES-256-GCM ciphertext produced by the Go server.
+/// Format: base64( nonce(12 bytes) || ciphertext+tag )
+fn aes_gcm_decrypt(encrypted_b64: &str, passphrase: &str) -> Result<Vec<u8>, String> {
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_b64.trim())
+        .map_err(|e| format!("base64_decode_error: {}", e))?;
+
+    let nonce_size = 12; // GCM standard nonce size
+    if data.len() < nonce_size {
+        return Err("encrypted_data_too_short".to_string());
+    }
+
+    let (nonce_bytes, ciphertext) = data.split_at(nonce_size);
+    let key_bytes = derive_key(passphrase);
+    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Nonce::from_slice(nonce_bytes);
+
+    cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|e| format!("aes_gcm_decrypt_error: {}", e))
+}
+
+/// Extract the `payload` query parameter from an HTTP GET request string.
+/// The request line looks like: `GET /sso-callback?payload=<url-encoded-data> HTTP/1.1`
+fn extract_get_payload(request: &str) -> String {
+    // Get the first line of the HTTP request
+    let first_line = request.lines().next().unwrap_or("");
+
+    // Find ?payload=
+    if let Some(qs_start) = first_line.find("?payload=") {
+        let after = &first_line[qs_start + "?payload=".len()..];
+        // Trim to end of query (next & or space)
+        let raw = after
+            .split(|c| c == '&' || c == ' ')
+            .next()
+            .unwrap_or("")
+            .trim();
+        // URL decode: replace + with space then decode %XX
+        url_decode(raw)
+    } else {
+        String::new()
+    }
+}
+
+/// Minimal URL percent-decoder (handles %XX and + → space).
+fn url_decode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                if let Ok(s) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
+                    if let Ok(b) = u8::from_str_radix(s, 16) {
+                        out.push(b as char);
+                        i += 3;
+                        continue;
+                    }
+                }
+                out.push('%');
+                i += 1;
+            }
+            b => {
+                out.push(b as char);
+                i += 1;
+            }
+        }
+    }
+    out
+}
 
 struct OAuthFlowState {
     auth_url: String,
@@ -21,6 +108,12 @@ struct OAuthFlowState {
 pub struct VnpayAccount {
     pub email: String,
     pub refresh_token: String,
+    #[serde(rename = "type", default)]
+    pub account_type: String,
+    #[serde(rename = "token", default)]
+    pub anthropic_auth_token: Option<String>,
+    #[serde(rename = "base_url", default)]
+    pub anthropic_base_url: Option<String>,
 }
 
 struct VnpaySsoState {
@@ -587,28 +680,43 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                     
                     crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv4): {} bytes", bytes_read));
 
-                    // Check if this is /sso-callback
+                    // Check if this is /sso-callback GET request
                     if request.contains("/sso-callback") {
-                        // Extract JSON body from POST request
-                        let body = request
-                            .split("\r\n\r\n")
-                            .nth(1)
-                            .unwrap_or("");
+                        // Extract payload from GET ?payload= query parameter
+                        let payload = extract_get_payload(&request);
 
-                        crate::modules::logger::log_info(&format!("VNPAY SSO body: {}", body));
+                        crate::modules::logger::log_info(&format!("VNPAY SSO payload (raw, {} bytes)", payload.len()));
 
-                        match serde_json::from_str::<Vec<VnpayAccount>>(body) {
+                        // Decrypt AES-256-GCM, fallback to raw JSON if not encrypted
+                        let passphrase = crate::modules::config::get_vnpay_sso_passphrase();
+                        let decrypted_body = match aes_gcm_decrypt(payload.trim(), &passphrase) {
+                            Ok(plain) => {
+                                crate::modules::logger::log_info("VNPAY SSO payload decrypted successfully (IPv4)");
+                                String::from_utf8(plain)
+                                    .unwrap_or_else(|_| payload.clone())
+                            }
+                            Err(e) => {
+                                crate::modules::logger::log_warn(&format!(
+                                    "VNPAY SSO AES decrypt failed (IPv4), trying raw JSON: {}", e
+                                ));
+                                payload.clone()
+                            }
+                        };
+                        
+                        match serde_json::from_str::<Vec<VnpayAccount>>(&decrypted_body) {
                             Ok(accounts) => {
                                 crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
                                 
-                                // Send success response
-                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
-                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                                    <h1 style='color: green;'>✅ VNPAY SSO Successful!</h1>\
-                                    <p>Received {} account(s). You can close this window.</p>\
-                                    <script>setTimeout(function() { window.close(); }, 2000);</script>\
-                                    </body></html>";
-                                let response = response.replace("{}", &accounts.len().to_string());
+                                // Send success response with JS to close browser
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\n\r\n\
+                                    <html><head><meta charset='utf-8'></head><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: green;'>&#x2705; Đăng nhập thành công!</h1>\
+                                    <p>Đã nhận {} tài khoản. Cửa sổ này sẽ tự đóng...</p>\
+                                    <script>window.close(); setTimeout(function(){{ window.close(); }}, 500);</script>\
+                                    </body></html>",
+                                    accounts.len()
+                                );
                                 let _ = stream.write_all(response.as_bytes()).await;
                                 let _ = stream.flush().await;
 
@@ -626,8 +734,8 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                                 crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
                                 let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
                                     <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                                    <h1 style='color: red;'>❌ Invalid Data Format</h1>\
-                                    <p>Failed to parse account data.</p>\
+                                    <h1 style='color: red;'>&#x274C; Dữ liệu không hợp lệ</h1>\
+                                    <p>Không thể phân tích dữ liệu tài khoản.</p>\
                                     </body></html>";
                                 let _ = stream.write_all(response.as_bytes()).await;
                                 let _ = stream.flush().await;
@@ -659,24 +767,40 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                     crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv6): {} bytes", bytes_read));
 
                     if request.contains("/sso-callback") {
-                        let body = request
-                            .split("\r\n\r\n")
-                            .nth(1)
-                            .unwrap_or("");
+                        // Extract payload from GET ?payload= query parameter
+                        let payload = extract_get_payload(&request);
 
-                        crate::modules::logger::log_info(&format!("VNPAY SSO body: {}", body));
+                        crate::modules::logger::log_info(&format!("VNPAY SSO payload (raw, {} bytes)", payload.len()));
 
-                        match serde_json::from_str::<Vec<VnpayAccount>>(body) {
+                        // Decrypt AES-256-GCM, fallback to raw JSON if not encrypted
+                        let passphrase = crate::modules::config::get_vnpay_sso_passphrase();
+                        let decrypted_body = match aes_gcm_decrypt(payload.trim(), &passphrase) {
+                            Ok(plain) => {
+                                crate::modules::logger::log_info("VNPAY SSO payload decrypted successfully (IPv6)");
+                                String::from_utf8(plain)
+                                    .unwrap_or_else(|_| payload.clone())
+                            }
+                            Err(e) => {
+                                crate::modules::logger::log_warn(&format!(
+                                    "VNPAY SSO AES decrypt failed (IPv6), trying raw JSON: {}", e
+                                ));
+                                payload.clone()
+                            }
+                        };
+
+                        match serde_json::from_str::<Vec<VnpayAccount>>(&decrypted_body) {
                             Ok(accounts) => {
                                 crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
                                 
-                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
-                                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                                    <h1 style='color: green;'>✅ VNPAY SSO Successful!</h1>\
-                                    <p>Received {} account(s). You can close this window.</p>\
-                                    <script>setTimeout(function() { window.close(); }, 2000);</script>\
-                                    </body></html>";
-                                let response = response.replace("{}", &accounts.len().to_string());
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\n\r\n\
+                                    <html><head><meta charset='utf-8'></head><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                                    <h1 style='color: green;'>&#x2705; Đăng nhập thành công!</h1>\
+                                    <p>Đã nhận {} tài khoản. Cửa sổ này sẽ tự đóng...</p>\
+                                    <script>window.close(); setTimeout(function(){{ window.close(); }}, 500);</script>\
+                                    </body></html>",
+                                    accounts.len()
+                                );
                                 let _ = stream.write_all(response.as_bytes()).await;
                                 let _ = stream.flush().await;
 
@@ -692,8 +816,8 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                                 crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
                                 let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
                                     <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                                    <h1 style='color: red;'>❌ Invalid Data Format</h1>\
-                                    <p>Failed to parse account data.</p>\
+                                    <h1 style='color: red;'>&#x274C; Dữ liệu không hợp lệ</h1>\
+                                    <p>Không thể phân tích dữ liệu tài khoản.</p>\
                                     </body></html>";
                                 let _ = stream.write_all(response.as_bytes()).await;
                                 let _ = stream.flush().await;
@@ -717,7 +841,17 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                 );
                 
                 for account_data in accounts {
-                    match service.add_account(&account_data.refresh_token).await {
+                    let account_type = if account_data.account_type.is_empty() {
+                        None
+                    } else {
+                        Some(account_data.account_type.clone())
+                    };
+                    match service.add_account(
+                        &account_data.refresh_token,
+                        account_type,
+                        account_data.anthropic_auth_token.clone(),
+                        account_data.anthropic_base_url.clone(),
+                    ).await {
                         Ok(account) => {
                             crate::modules::logger::log_info(&format!("Successfully added VNPAY account: {}", account.email));
                         },

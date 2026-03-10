@@ -77,6 +77,7 @@ function Accounts() {
   } | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
+  const [claudeConfirmAccount, setClaudeConfirmAccount] = useState<Account | null>(null);
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -84,6 +85,43 @@ function Accounts() {
       showToast(t('accounts.label_updated', 'Label updated'), 'success');
     } catch (error) {
       showToast(`${t('common.error')}: ${error}`, 'error');
+    }
+  };
+
+  const handleCliClaude = async (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account?.anthropic_auth_token || !account?.anthropic_base_url) {
+      showToast('Missing Anthropic credentials for this account', 'error');
+      return;
+    }
+    try {
+      const exists: boolean = await invoke('check_claude_settings_exists');
+      if (exists) {
+        setClaudeConfirmAccount(account);
+      } else {
+        await invoke('write_claude_settings', {
+          authToken: account.anthropic_auth_token,
+          baseUrl: account.anthropic_base_url,
+        });
+        showToast('Claude CLI settings written to ~/.claude/settings.json', 'success');
+      }
+    } catch (error) {
+      showToast(`Failed to configure Claude CLI: ${error}`, 'error');
+    }
+  };
+
+  const executeWriteClaudeSettings = async () => {
+    if (!claudeConfirmAccount) return;
+    try {
+      await invoke('write_claude_settings', {
+        authToken: claudeConfirmAccount.anthropic_auth_token!,
+        baseUrl: claudeConfirmAccount.anthropic_base_url!,
+      });
+      showToast('Claude CLI settings overwritten successfully', 'success');
+    } catch (error) {
+      showToast(`Failed to write Claude CLI settings: ${error}`, 'error');
+    } finally {
+      setClaudeConfirmAccount(null);
     }
   };
 
@@ -952,6 +990,7 @@ function Accounts() {
                 onReorder={reorderAccounts}
                 onUpdateLabel={handleUpdateLabel}
                 onViewError={(id: string) => setErrorAccountId(id)}
+                onCliClaude={handleCliClaude}
               />
             </div>
           </div>
@@ -978,6 +1017,7 @@ function Accounts() {
               }
               onUpdateLabel={handleUpdateLabel}
               onViewError={(id: string) => setErrorAccountId(id)}
+              onCliClaude={handleCliClaude}
             />
           </div>
         )}
@@ -1076,6 +1116,18 @@ function Accounts() {
       <AccountDetailsDialog
         account={detailsAccount}
         onClose={() => setDetailsAccount(null)}
+      />
+
+      {/* Claude CLI overwrite confirm */}
+      <ModalDialog
+        isOpen={!!claudeConfirmAccount}
+        title="Ghi đè cấu hình Claude CLI"
+        message={`~/.claude/settings.json đã tồn tại. Bạn có muốn ghi đè bằng thông tin của tài khoản ${claudeConfirmAccount?.email} không?`}
+        type="confirm"
+        confirmText="Ghi đè"
+        isDestructive={false}
+        onConfirm={executeWriteClaudeSettings}
+        onCancel={() => setClaudeConfirmAccount(null)}
       />
 
       {/* 账号错误详情弹窗 */}

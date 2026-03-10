@@ -587,6 +587,9 @@ pub fn run() {
             commands::tracking::get_tracking_device_id,
             commands::tracking::get_tracking_machine_name,
             commands::tracking::get_tracking_os,
+            // Claude CLI commands
+            commands::check_claude_settings_exists,
+            commands::write_claude_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

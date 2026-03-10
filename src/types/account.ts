@@ -14,6 +14,9 @@ export interface Account {
     proxy_disabled_at?: number;
     protected_models?: string[];
     custom_label?: string;  // 用户自定义标签
+    account_type?: string;  // e.g. "anthropic"
+    anthropic_auth_token?: string;  // only for anthropic accounts
+    anthropic_base_url?: string;    // only for anthropic accounts
     validation_blocked?: boolean;
     validation_blocked_until?: number;
     validation_blocked_reason?: string;

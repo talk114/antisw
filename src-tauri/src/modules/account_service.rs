@@ -12,7 +12,7 @@ impl AccountService {
     }
 
     /// 添加账号逻辑
-    pub async fn add_account(&self, refresh_token: &str) -> Result<Account, String> {
+    pub async fn add_account(&self, refresh_token: &str, account_type: Option<String>, anthropic_auth_token: Option<String>, anthropic_base_url: Option<String>) -> Result<Account, String> {
         // [FIX #1583] 生成临时 UUID 作为账号上下文，避免传递 None 导致代理选择异常
         let temp_account_id = uuid::Uuid::new_v4().to_string();
         
@@ -40,6 +40,20 @@ impl AccountService {
         // 5. 持久化
         let mut account =
             modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)?;
+
+        // 5a. Set account_type and anthropic fields if provided
+        if account_type.is_some() {
+            account.account_type = account_type;
+            if account.account_type.as_deref() == Some("anthropic") {
+                account.anthropic_auth_token = anthropic_auth_token;
+                account.anthropic_base_url = anthropic_base_url;
+            }
+            if let Err(e) = modules::account::save_account(&account) {
+                modules::logger::log_warn(&format!(
+                    "[Service] Failed to save account_type for {}: {}", account.email, e
+                ));
+            }
+        }
 
         // 6. [NEW] 自动获取配额信息（用于刷新时间排序）
         let email_for_log = account.email.clone();

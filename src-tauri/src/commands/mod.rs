@@ -35,7 +35,7 @@ pub async fn add_account(
         crate::modules::integration::SystemManager::Desktop(app.clone()),
     );
 
-    let mut account = service.add_account(&refresh_token).await?;
+    let mut account = service.add_account(&refresh_token, None, None, None).await?;
 
     // 自动刷新配额
     let _ = internal_refresh_account_quota(&app, &mut account).await;
@@ -684,6 +684,50 @@ pub async fn open_data_folder() -> Result<(), String> {
 pub async fn get_data_dir_path() -> Result<String, String> {
     let path = modules::account::get_data_dir()?;
     Ok(path.to_string_lossy().to_string())
+}
+
+/// 获取 Claude CLI settings.json 路径 (~/.claude/settings.json)
+fn get_claude_settings_path() -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+    Ok(home.join(".claude").join("settings.json"))
+}
+
+/// 检查 Claude CLI settings.json 是否存在
+#[tauri::command]
+pub async fn check_claude_settings_exists() -> Result<bool, String> {
+    let path = get_claude_settings_path()?;
+    Ok(path.exists())
+}
+
+/// 写入 Claude CLI settings.json (含 ANTHROPIC_AUTH_TOKEN 和 ANTHROPIC_BASE_URL)
+#[tauri::command]
+pub async fn write_claude_settings(auth_token: String, base_url: String) -> Result<(), String> {
+    let path = get_claude_settings_path()?;
+
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create ~/.claude directory: {}", e))?;
+    }
+
+    let content = serde_json::json!({
+        "env": {
+            "ANTHROPIC_AUTH_TOKEN": auth_token,
+            "ANTHROPIC_BASE_URL": base_url
+        }
+    });
+
+    let json_str = serde_json::to_string_pretty(&content)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    std::fs::write(&path, json_str)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+
+    modules::logger::log_info(&format!(
+        "Claude CLI settings written to: {}",
+        path.display()
+    ));
+    Ok(())
 }
 
 /// 显示主窗口
