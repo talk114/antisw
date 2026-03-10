@@ -1,15 +1,15 @@
+use crate::modules::oauth;
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use base64::Engine;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::sync::{Mutex, OnceLock};
+use tauri::Url;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
-use std::sync::{Mutex, OnceLock};
-use tauri::Url;
-use crate::modules::oauth;
-use serde::{Deserialize, Serialize};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
-use aes_gcm::aead::{Aead, KeyInit};
-use sha2::{Sha256, Digest};
-use base64::Engine;
 
 /// Derive a 32-byte AES key from passphrase using SHA-256 (mirrors Go's deriveKey).
 fn derive_key(passphrase: &str) -> [u8; 32] {
@@ -155,8 +155,9 @@ fn oauth_fail_html() -> &'static str {
     </html>"
 }
 
-async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Result<String, String> {
-
+async fn ensure_oauth_flow_prepared(
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<String, String> {
     // Return URL if flow already exists and is still "fresh" (receiver hasn't been taken)
     if let Ok(mut state) = get_oauth_flow_state().lock() {
         if let Some(s) = state.as_mut() {
@@ -258,14 +259,18 @@ async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Res
                 let mut buffer = [0u8; 4096];
                 let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
                 let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                
+
                 // [FIX #931/850/778] More robust parsing and detailed logging
                 let query_params = request
                     .lines()
                     .next()
                     .and_then(|line| {
                         let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 2 { Some(parts[1]) } else { None }
+                        if parts.len() >= 2 {
+                            Some(parts[1])
+                        } else {
+                            None
+                        }
                     })
                     .and_then(|path| {
                         // Use a dummy base for parsing; redirect_uri is already set to localhost
@@ -275,8 +280,11 @@ async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Res
                         let mut code = None;
                         let mut state = None;
                         for (k, v) in url.query_pairs() {
-                            if k == "code" { code = Some(v.to_string()); }
-                            else if k == "state" { state = Some(v.to_string()); }
+                            if k == "code" {
+                                code = Some(v.to_string());
+                            } else if k == "state" {
+                                state = Some(v.to_string());
+                            }
                         }
                         (code, state)
                     });
@@ -308,16 +316,23 @@ async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Res
 
                 let (result, response_html) = match (code, state_valid) {
                     (Some(code), true) => {
-                        crate::modules::logger::log_info("Successfully captured OAuth code from IPv4 listener");
+                        crate::modules::logger::log_info(
+                            "Successfully captured OAuth code from IPv4 listener",
+                        );
                         (Ok(code), oauth_success_html())
-                    },
+                    }
                     (Some(_), false) => {
-                        crate::modules::logger::log_error("OAuth callback state mismatch (CSRF protection)");
+                        crate::modules::logger::log_error(
+                            "OAuth callback state mismatch (CSRF protection)",
+                        );
                         (Err("OAuth state mismatch".to_string()), oauth_fail_html())
-                    },
-                    (None, _) => (Err("Failed to get Authorization Code in callback".to_string()), oauth_fail_html()),
+                    }
+                    (None, _) => (
+                        Err("Failed to get Authorization Code in callback".to_string()),
+                        oauth_fail_html(),
+                    ),
                 };
-                
+
                 let _ = stream.write_all(response_html.as_bytes()).await;
                 let _ = stream.flush().await;
 
@@ -342,23 +357,28 @@ async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Res
                 let mut buffer = [0u8; 4096];
                 let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
                 let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                
+
                 let query_params = request
                     .lines()
                     .next()
                     .and_then(|line| {
                         let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 2 { Some(parts[1]) } else { None }
+                        if parts.len() >= 2 {
+                            Some(parts[1])
+                        } else {
+                            None
+                        }
                     })
-                    .and_then(|path| {
-                        Url::parse(&format!("http://localhost{}", path)).ok()
-                    })
+                    .and_then(|path| Url::parse(&format!("http://localhost{}", path)).ok())
                     .map(|url| {
                         let mut code = None;
                         let mut state = None;
                         for (k, v) in url.query_pairs() {
-                            if k == "code" { code = Some(v.to_string()); }
-                            else if k == "state" { state = Some(v.to_string()); }
+                            if k == "code" {
+                                code = Some(v.to_string());
+                            } else if k == "state" {
+                                state = Some(v.to_string());
+                            }
                         }
                         (code, state)
                     });
@@ -390,16 +410,23 @@ async fn ensure_oauth_flow_prepared(app_handle: Option<tauri::AppHandle>) -> Res
 
                 let (result, response_html) = match (code, state_valid) {
                     (Some(code), true) => {
-                        crate::modules::logger::log_info("Successfully captured OAuth code from IPv6 listener");
+                        crate::modules::logger::log_info(
+                            "Successfully captured OAuth code from IPv6 listener",
+                        );
                         (Ok(code), oauth_success_html())
-                    },
+                    }
                     (Some(_), false) => {
-                        crate::modules::logger::log_error("OAuth callback state mismatch (IPv6 CSRF protection)");
+                        crate::modules::logger::log_error(
+                            "OAuth callback state mismatch (IPv6 CSRF protection)",
+                        );
                         (Err("OAuth state mismatch".to_string()), oauth_fail_html())
-                    },
-                    (None, _) => (Err("Failed to get Authorization Code in callback".to_string()), oauth_fail_html()),
+                    }
+                    (None, _) => (
+                        Err("Failed to get Authorization Code in callback".to_string()),
+                        oauth_fail_html(),
+                    ),
                 };
-                
+
                 let _ = stream.write_all(response_html.as_bytes()).await;
                 let _ = stream.flush().await;
 
@@ -449,7 +476,9 @@ pub fn cancel_oauth_flow() {
 }
 
 /// Start OAuth flow and wait for callback, then exchange token
-pub async fn start_oauth_flow(app_handle: Option<tauri::AppHandle>) -> Result<oauth::TokenResponse, String> {
+pub async fn start_oauth_flow(
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<oauth::TokenResponse, String> {
     // Ensure URL + listener are ready (this way if the user authorizes first, it won't get stuck)
     let auth_url = ensure_oauth_flow_prepared(app_handle.clone()).await?;
 
@@ -495,7 +524,9 @@ pub async fn start_oauth_flow(app_handle: Option<tauri::AppHandle>) -> Result<oa
 /// Завершить OAuth flow без открытия браузера.
 /// Предполагается, что пользователь открыл ссылку вручную (или ранее была открыта),
 /// а мы только ждём callback и обмениваем code на token.
-pub async fn complete_oauth_flow(app_handle: Option<tauri::AppHandle>) -> Result<oauth::TokenResponse, String> {
+pub async fn complete_oauth_flow(
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<oauth::TokenResponse, String> {
     // Ensure URL + listeners exist
     let _ = ensure_oauth_flow_prepared(app_handle).await?;
 
@@ -530,7 +561,10 @@ pub async fn complete_oauth_flow(app_handle: Option<tauri::AppHandle>) -> Result
 /// Manually submit an OAuth code to complete the flow.
 /// This is used when the user manually copies the code/URL from the browser
 /// because the localhost callback couldn't be reached (e.g. in Docker/remote).
-pub async fn submit_oauth_code(code_input: String, state_input: Option<String>) -> Result<(), String> {
+pub async fn submit_oauth_code(
+    code_input: String,
+    state_input: Option<String>,
+) -> Result<(), String> {
     let tx = {
         let lock = get_oauth_flow_state().lock().map_err(|e| e.to_string())?;
         if let Some(state) = lock.as_ref() {
@@ -561,25 +595,30 @@ pub async fn submit_oauth_code(code_input: String, state_input: Option<String>) 
     };
 
     crate::modules::logger::log_info("Received manual OAuth code submission");
-    
+
     // Send to the channel
-    tx.send(Ok(code)).await.map_err(|_| "Failed to send code to OAuth flow (receiver dropped)".to_string())?;
-    
+    tx.send(Ok(code))
+        .await
+        .map_err(|_| "Failed to send code to OAuth flow (receiver dropped)".to_string())?;
+
     Ok(())
 }
 /// Manually prepare an OAuth flow without starting listeners.
 /// Useful for Web/Docker environments where we only need manual code submission.
-pub fn prepare_oauth_flow_manually(redirect_uri: String, state_str: String) -> Result<(String, mpsc::Receiver<Result<String, String>>), String> {
+pub fn prepare_oauth_flow_manually(
+    redirect_uri: String,
+    state_str: String,
+) -> Result<(String, mpsc::Receiver<Result<String, String>>), String> {
     let auth_url = oauth::get_auth_url(&redirect_uri, &state_str);
-    
+
     // Check if we can reuse existing state
     if let Ok(mut lock) = get_oauth_flow_state().lock() {
         if let Some(s) = lock.as_mut() {
-             // If we already have a code_rx, we can't easily "steal" it again because it's already returned.
-             // But if this is a NEW request (different state), we should overwrite.
-             // For now, let's just clear and restart to be safe.
-             let _ = s.cancel_tx.send(true);
-             *lock = None;
+            // If we already have a code_rx, we can't easily "steal" it again because it's already returned.
+            // But if this is a NEW request (different state), we should overwrite.
+            // For now, let's just clear and restart to be safe.
+            let _ = s.cancel_tx.send(true);
+            *lock = None;
         }
     }
 
@@ -602,7 +641,9 @@ pub fn prepare_oauth_flow_manually(redirect_uri: String, state_str: String) -> R
 
 /// Prepare VNPAY SSO listener
 /// Returns the port number to construct callback URL: http://localhost:{port}/sso-callback
-pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) -> Result<u16, String> {
+pub async fn prepare_vnpay_sso_listener(
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<u16, String> {
     // Cancel existing listener if any
     if let Ok(mut state) = get_vnpay_sso_state().lock() {
         if let Some(s) = state.take() {
@@ -665,7 +706,7 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
         let tx = accounts_tx.clone();
         let mut rx = cancel_rx.clone();
         let app_handle = app_handle_for_tasks.clone();
-        
+
         tokio::spawn(async move {
             loop {
                 let accept_result = tokio::select! {
@@ -677,36 +718,59 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                     let mut buffer = [0u8; 8192];
                     let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
                     let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    
-                    crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv4): {} bytes", bytes_read));
+
+                    crate::modules::logger::log_info(&format!(
+                        "VNPAY SSO callback received (IPv4): {} bytes",
+                        bytes_read
+                    ));
 
                     // Check if this is /sso-callback GET request
                     if request.contains("/sso-callback") {
                         // Extract payload from GET ?payload= query parameter
                         let payload = extract_get_payload(&request);
 
-                        crate::modules::logger::log_info(&format!("VNPAY SSO payload (raw, {} bytes)", payload.len()));
+                        crate::modules::logger::log_info(&format!(
+                            "VNPAY SSO payload (raw, {} bytes)",
+                            payload.len()
+                        ));
 
                         // Decrypt AES-256-GCM, fallback to raw JSON if not encrypted
                         let passphrase = crate::modules::config::get_vnpay_sso_passphrase();
                         let decrypted_body = match aes_gcm_decrypt(payload.trim(), &passphrase) {
                             Ok(plain) => {
-                                crate::modules::logger::log_info("VNPAY SSO payload decrypted successfully (IPv4)");
-                                String::from_utf8(plain)
-                                    .unwrap_or_else(|_| payload.clone())
+                                crate::modules::logger::log_info(
+                                    "VNPAY SSO payload decrypted successfully (IPv4)",
+                                );
+                                String::from_utf8(plain).unwrap_or_else(|_| payload.clone())
                             }
                             Err(e) => {
                                 crate::modules::logger::log_warn(&format!(
-                                    "VNPAY SSO AES decrypt failed (IPv4), trying raw JSON: {}", e
+                                    "VNPAY SSO AES decrypt failed (IPv4), trying raw JSON: {}",
+                                    e
                                 ));
                                 payload.clone()
                             }
                         };
-                        
+
                         match serde_json::from_str::<Vec<VnpayAccount>>(&decrypted_body) {
                             Ok(accounts) => {
-                                crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
-                                
+                                crate::modules::logger::log_info(&format!(
+                                    "Successfully parsed {} VNPAY accounts",
+                                    accounts.len()
+                                ));
+                                for (i, acc) in accounts.iter().enumerate() {
+                                    crate::modules::logger::log_info(&format!(
+                                        "  [{}] email={}, type={}",
+                                        i + 1,
+                                        acc.email,
+                                        if acc.account_type.is_empty() {
+                                            "(default)"
+                                        } else {
+                                            &acc.account_type
+                                        }
+                                    ));
+                                }
+
                                 // Send success response with JS to close browser
                                 let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\n\r\n\
@@ -729,9 +793,12 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                                 // Send to channel
                                 let _ = tx.send(accounts).await;
                                 break; // Stop listener after successful callback
-                            },
+                            }
                             Err(e) => {
-                                crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
+                                crate::modules::logger::log_error(&format!(
+                                    "Failed to parse VNPAY accounts JSON: {}",
+                                    e
+                                ));
                                 let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
                                     <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
                                     <h1 style='color: red;'>&#x274C; Dữ liệu không hợp lệ</h1>\
@@ -751,7 +818,7 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
         let tx = accounts_tx.clone();
         let mut rx = cancel_rx.clone();
         let app_handle = app_handle_for_tasks;
-        
+
         tokio::spawn(async move {
             loop {
                 let accept_result = tokio::select! {
@@ -763,35 +830,62 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
                     let mut buffer = [0u8; 8192];
                     let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
                     let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    
-                    crate::modules::logger::log_info(&format!("VNPAY SSO callback received (IPv6): {} bytes", bytes_read));
+
+                    crate::modules::logger::log_info(&format!(
+                        "VNPAY SSO callback received (IPv6): {} bytes",
+                        bytes_read
+                    ));
 
                     if request.contains("/sso-callback") {
                         // Extract payload from GET ?payload= query parameter
                         let payload = extract_get_payload(&request);
 
-                        crate::modules::logger::log_info(&format!("VNPAY SSO payload (raw, {} bytes)", payload.len()));
+                        crate::modules::logger::log_info(&format!(
+                            "VNPAY SSO payload (raw, {} bytes)",
+                            payload.len()
+                        ));
 
                         // Decrypt AES-256-GCM, fallback to raw JSON if not encrypted
                         let passphrase = crate::modules::config::get_vnpay_sso_passphrase();
                         let decrypted_body = match aes_gcm_decrypt(payload.trim(), &passphrase) {
                             Ok(plain) => {
-                                crate::modules::logger::log_info("VNPAY SSO payload decrypted successfully (IPv6)");
-                                String::from_utf8(plain)
-                                    .unwrap_or_else(|_| payload.clone())
+                                crate::modules::logger::log_info(
+                                    "VNPAY SSO payload decrypted successfully (IPv6)",
+                                );
+                                String::from_utf8(plain).unwrap_or_else(|_| payload.clone())
                             }
                             Err(e) => {
                                 crate::modules::logger::log_warn(&format!(
-                                    "VNPAY SSO AES decrypt failed (IPv6), trying raw JSON: {}", e
+                                    "VNPAY SSO AES decrypt failed (IPv6), trying raw JSON: {}",
+                                    e
                                 ));
                                 payload.clone()
                             }
                         };
+                        crate::modules::logger::log_info(&format!(
+                            "VNPAY SSO Data Respone ({} )",
+                            decrypted_body
+                        ));
 
                         match serde_json::from_str::<Vec<VnpayAccount>>(&decrypted_body) {
                             Ok(accounts) => {
-                                crate::modules::logger::log_info(&format!("Successfully parsed {} VNPAY accounts", accounts.len()));
-                                
+                                crate::modules::logger::log_info(&format!(
+                                    "Successfully parsed {} VNPAY accounts",
+                                    accounts.len()
+                                ));
+                                for (i, acc) in accounts.iter().enumerate() {
+                                    crate::modules::logger::log_info(&format!(
+                                        "  [{}] email={}, type={}",
+                                        i + 1,
+                                        acc.email,
+                                        if acc.account_type.is_empty() {
+                                            "(default)"
+                                        } else {
+                                            &acc.account_type
+                                        }
+                                    ));
+                                }
+
                                 let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\n\r\n\
                                     <html><head><meta charset='utf-8'></head><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
@@ -811,9 +905,12 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
 
                                 let _ = tx.send(accounts).await;
                                 break;
-                            },
+                            }
                             Err(e) => {
-                                crate::modules::logger::log_error(&format!("Failed to parse VNPAY accounts JSON: {}", e));
+                                crate::modules::logger::log_error(&format!(
+                                    "Failed to parse VNPAY accounts JSON: {}",
+                                    e
+                                ));
                                 let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
                                     <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
                                     <h1 style='color: red;'>&#x274C; Dữ liệu không hợp lệ</h1>\
@@ -833,34 +930,68 @@ pub async fn prepare_vnpay_sso_listener(app_handle: Option<tauri::AppHandle>) ->
     if let Some(h) = app_handle {
         tokio::spawn(async move {
             if let Some(accounts) = accounts_rx.recv().await {
-                crate::modules::logger::log_info(&format!("Processing {} VNPAY accounts for storage", accounts.len()));
-                
+                crate::modules::logger::log_info(&format!(
+                    "Processing {} VNPAY accounts for storage",
+                    accounts.len()
+                ));
+
                 // Import accounts using AccountService
                 let service = crate::modules::account_service::AccountService::new(
-                    crate::modules::integration::SystemManager::Desktop(h.clone())
+                    crate::modules::integration::SystemManager::Desktop(h.clone()),
                 );
-                
+
                 for account_data in accounts {
+                    // Anthropic accounts are handled separately — emit event for CLI Claude
+                    if account_data.account_type == "anthropic" {
+                        crate::modules::logger::log_info(&format!(
+                            "Received anthropic account, emitting event for CLI Claude"
+                        ));
+                        #[derive(serde::Serialize, Clone)]
+                        struct AnthropicPayload {
+                            token: Option<String>,
+                            base_url: Option<String>,
+                        }
+                        use tauri::Emitter;
+                        let _ = h.emit(
+                            "vnpay-anthropic-received",
+                            AnthropicPayload {
+                                token: account_data.anthropic_auth_token.clone(),
+                                base_url: account_data.anthropic_base_url.clone(),
+                            },
+                        );
+                        continue;
+                    }
+
                     let account_type = if account_data.account_type.is_empty() {
                         None
                     } else {
                         Some(account_data.account_type.clone())
                     };
-                    match service.add_account(
-                        &account_data.refresh_token,
-                        account_type,
-                        account_data.anthropic_auth_token.clone(),
-                        account_data.anthropic_base_url.clone(),
-                    ).await {
+
+                    match service
+                        .add_account(
+                            &account_data.refresh_token,
+                            account_type,
+                            account_data.anthropic_auth_token.clone(),
+                            account_data.anthropic_base_url.clone(),
+                        )
+                        .await
+                    {
                         Ok(account) => {
-                            crate::modules::logger::log_info(&format!("Successfully added VNPAY account: {}", account.email));
-                        },
+                            crate::modules::logger::log_info(&format!(
+                                "Successfully added VNPAY account: {}",
+                                account.email
+                            ));
+                        }
                         Err(e) => {
-                            crate::modules::logger::log_error(&format!("Failed to add VNPAY account {}: {}", account_data.email, e));
+                            crate::modules::logger::log_error(&format!(
+                                "Failed to add VNPAY account {}: {}",
+                                account_data.email, e
+                            ));
                         }
                     }
                 }
-                
+
                 // Emit completion event
                 use tauri::Emitter;
                 let _ = h.emit("vnpay-sso-import-completed", ());

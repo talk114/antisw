@@ -42,7 +42,6 @@ import {
     X,
     Check,
     Clock,
-    Terminal,
 } from 'lucide-react';
 import { Account } from '../../types/account';
 import { useTranslation } from 'react-i18next';
@@ -76,7 +75,6 @@ interface AccountTableProps {
     /** 拖拽排序回调，当用户完成拖拽时触发 */
     onReorder?: (accountIds: string[]) => void;
     onViewError: (accountId: string) => void;
-    onCliClaude?: (accountId: string) => void;
 }
 
 interface SortableRowProps {
@@ -97,7 +95,6 @@ interface SortableRowProps {
     onWarmup?: () => void;
     onUpdateLabel?: (label: string) => void;
     onViewError: () => void;
-    onCliClaude?: () => void;
 }
 
 interface AccountRowContentProps {
@@ -116,7 +113,6 @@ interface AccountRowContentProps {
     onWarmup?: () => void;
     onUpdateLabel?: (label: string) => void;
     onViewError: () => void;
-    onCliClaude?: () => void;
 }
 
 // ============================================================================
@@ -219,7 +215,6 @@ function SortableAccountRow({
     onWarmup,
     onUpdateLabel,
     onViewError,
-    onCliClaude,
 }: SortableRowProps) {
     const { t } = useTranslation();
     const {
@@ -286,7 +281,6 @@ function SortableAccountRow({
                 onWarmup={onWarmup}
                 onUpdateLabel={onUpdateLabel}
                 onViewError={onViewError}
-                onCliClaude={onCliClaude}
             />
         </tr>
     );
@@ -312,7 +306,6 @@ function AccountRowContent({
     onWarmup,
     onUpdateLabel,
     onViewError,
-    onCliClaude,
 }: AccountRowContentProps) {
     const { t } = useTranslation();
     const { config, showAllQuotas } = useConfigStore();
@@ -667,15 +660,7 @@ function AccountRowContent({
                             <ToggleLeft className="w-3.5 h-3.5" />
                         )}
                     </button>
-                    {account.account_type === 'anthropic' && onCliClaude && (
-                        <button
-                            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-lg transition-all"
-                            onClick={(e) => { e.stopPropagation(); onCliClaude(); }}
-                            title="CLI Claude"
-                        >
-                            <Terminal className="w-3.5 h-3.5" />
-                        </button>
-                    )}
+
                     <button
                         className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
                         onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -715,8 +700,7 @@ function AccountTable({
     onReorder,
     onWarmup,
     onUpdateLabel,
-    onViewError,
-    onCliClaude,
+    onViewError
 }: AccountTableProps) {
     const { t } = useTranslation();
 
@@ -815,7 +799,6 @@ function AccountTable({
                                     onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}
                                     onUpdateLabel={onUpdateLabel ? (label: string) => onUpdateLabel(account.id, label) : undefined}
                                     onViewError={() => onViewError(account.id)}
-                                    onCliClaude={onCliClaude ? () => onCliClaude(account.id) : undefined}
                                 />
                             ))}
                         </tbody>

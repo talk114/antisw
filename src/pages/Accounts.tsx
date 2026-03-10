@@ -5,6 +5,7 @@ import {
   List,
   RefreshCw,
   Search,
+  Terminal,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -78,6 +79,8 @@ function Accounts() {
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
   const [claudeConfirmAccount, setClaudeConfirmAccount] = useState<Account | null>(null);
+  // Anthropic credentials received from VNPAY SSO (stored separately, not in account list)
+  const [anthropicCredentials, setAnthropicCredentials] = useState<{ token: string; base_url: string } | null>(null);
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -88,21 +91,24 @@ function Accounts() {
     }
   };
 
-  const handleCliClaude = async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
-    if (!account?.anthropic_auth_token || !account?.anthropic_base_url) {
-      showToast('Missing Anthropic credentials for this account', 'error');
+  const handleCliClaude = async (accountId?: string) => {
+    // Prefer anthropicCredentials from SSO event; fallback to account-based lookup
+    const token = anthropicCredentials?.token ||
+      (accountId ? accounts.find(a => a.id === accountId)?.anthropic_auth_token : undefined);
+    const baseUrl = anthropicCredentials?.base_url ||
+      (accountId ? accounts.find(a => a.id === accountId)?.anthropic_base_url : undefined);
+
+    if (!token || !baseUrl) {
+      showToast('Missing Anthropic credentials. Please login via SSO VNPAY first.', 'error');
       return;
     }
     try {
       const exists: boolean = await invoke('check_claude_settings_exists');
       if (exists) {
-        setClaudeConfirmAccount(account);
+        // Use a temp account-like object for confirm dialog
+        setClaudeConfirmAccount({ anthropic_auth_token: token, anthropic_base_url: baseUrl } as any);
       } else {
-        await invoke('write_claude_settings', {
-          authToken: account.anthropic_auth_token,
-          baseUrl: account.anthropic_base_url,
-        });
+        await invoke('write_claude_settings', { authToken: token, baseUrl });
         showToast('Claude CLI settings written to ~/.claude/settings.json', 'success');
       }
     } catch (error) {
@@ -217,6 +223,15 @@ function Accounts() {
         showToast(`Received ${accounts.length} VNPAY account(s)`, 'info');
       });
 
+      const unlistenAnthropicReceived = await listen('vnpay-anthropic-received', (event: any) => {
+        const payload = event.payload as { token: string | null; base_url: string | null };
+        console.log('[Accounts] Received anthropic credentials from SSO');
+        if (payload.token && payload.base_url) {
+          setAnthropicCredentials({ token: payload.token, base_url: payload.base_url });
+          showToast('Anthropic credentials received. CLI Claude is ready.', 'success');
+        }
+      });
+
       const unlistenCompleted = await listen('vnpay-sso-import-completed', () => {
         console.log('[Accounts] VNPAY SSO import completed');
         showToast('VNPAY accounts imported successfully', 'success');
@@ -227,6 +242,7 @@ function Accounts() {
 
       return () => {
         unlistenAccounts();
+        unlistenAnthropicReceived();
         unlistenCompleted();
       };
     };
@@ -839,6 +855,19 @@ function Accounts() {
 
         {/* 操作按钮组 */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* CLI Claude — trạng thái đặc biệt, không thuộc account list */}
+          <button
+            className="px-2.5 py-2 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors flex items-center gap-1.5 shadow-sm"
+            onClick={() => handleCliClaude()}
+            title={anthropicCredentials ? 'CLI Claude (credentials ready)' : 'CLI Claude (login via SSO VNPAY first)'}
+          >
+            <Terminal className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden lg:inline">CLI Claude</span>
+            {anthropicCredentials && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-300 shrink-0" title="Credentials ready" />
+            )}
+          </button>
+
           <button
             className="px-2.5 py-2 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 shadow-sm"
             onClick={async () => {
@@ -846,8 +875,8 @@ function Accounts() {
                 // Prepare VNPAY SSO listener and get dynamic port
                 const port = await invoke<number>('prepare_vnpay_sso_listener');
 
-                const callbackUrl = `http://localhost:${port}/sso-callback`;
-                const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?urlcallback=${encodeURIComponent(callbackUrl)}`;
+                const callbackUrl = `${port}`;
+                const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?connectid=${encodeURIComponent(callbackUrl)}`;
 
                 // Open in default browser using opener plugin
                 if (isTauri()) {
@@ -990,7 +1019,6 @@ function Accounts() {
                 onReorder={reorderAccounts}
                 onUpdateLabel={handleUpdateLabel}
                 onViewError={(id: string) => setErrorAccountId(id)}
-                onCliClaude={handleCliClaude}
               />
             </div>
           </div>
@@ -1009,15 +1037,8 @@ function Accounts() {
               onViewDetails={handleViewDetails}
 
               onDelete={handleDelete}
-              onToggleProxy={(id) =>
-                handleToggleProxy(
-                  id,
-                  !!accounts.find((a) => a.id === id)?.proxy_disabled,
-                )
-              }
               onUpdateLabel={handleUpdateLabel}
               onViewError={(id: string) => setErrorAccountId(id)}
-              onCliClaude={handleCliClaude}
             />
           </div>
         )}
@@ -1121,10 +1142,10 @@ function Accounts() {
       {/* Claude CLI overwrite confirm */}
       <ModalDialog
         isOpen={!!claudeConfirmAccount}
-        title="Ghi đè cấu hình Claude CLI"
-        message={`~/.claude/settings.json đã tồn tại. Bạn có muốn ghi đè bằng thông tin của tài khoản ${claudeConfirmAccount?.email} không?`}
+        title={t('accounts.dialog.cli_claude_overwrite_title')}
+        message={t('accounts.dialog.cli_claude_overwrite_msg')}
         type="confirm"
-        confirmText="Ghi đè"
+        confirmText={t('accounts.dialog.cli_claude_overwrite_confirm')}
         isDestructive={false}
         onConfirm={executeWriteClaudeSettings}
         onCancel={() => setClaudeConfirmAccount(null)}
