@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use crate::modules::logger;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-const VERSION_SERVER_URL: &str = "http://gravityland.vnoffice.io.vn/app.version";
+const VERSION_SERVER_URL: &str = "http://gravityland.vnoffice.io.vn/aicndl/app.version";
 const DOWNLOAD_URL: &str = "https://gravityland.vnoffice.io.vn";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
@@ -69,7 +69,10 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         .map_err(|e| format!("Request to version server failed: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("Version server returned status: {}", response.status()));
+        return Err(format!(
+            "Version server returned status: {}",
+            response.status()
+        ));
     }
 
     let server_info: ServerVersionInfo = response
@@ -135,30 +138,33 @@ async fn create_client() -> Result<reqwest::Client, String> {
     // Load config to check for upstream proxy
     if let Ok(config) = crate::modules::config::load_app_config() {
         if config.proxy.upstream_proxy.enabled && !config.proxy.upstream_proxy.url.is_empty() {
-            logger::log_info(&format!("Update checker using upstream proxy: {}", config.proxy.upstream_proxy.url));
+            logger::log_info(&format!(
+                "Update checker using upstream proxy: {}",
+                config.proxy.upstream_proxy.url
+            ));
             match reqwest::Proxy::all(&config.proxy.upstream_proxy.url) {
                 Ok(proxy) => {
                     builder = builder.proxy(proxy);
-                },
+                }
                 Err(e) => {
-                    logger::log_warn(&format!("Failed to parse proxy URL '{}': {}", config.proxy.upstream_proxy.url, e));
+                    logger::log_warn(&format!(
+                        "Failed to parse proxy URL '{}': {}",
+                        config.proxy.upstream_proxy.url, e
+                    ));
                 }
             }
         }
     }
 
-    builder.build().map_err(|e| format!("Failed to create HTTP client: {}", e))
+    builder
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))
 }
-
-
 
 /// Compare two semantic versions (e.g., "3.3.30" vs "3.3.29")
 fn compare_versions(latest: &str, current: &str) -> bool {
-    let parse_version = |v: &str| -> Vec<u32> {
-        v.split('.')
-            .filter_map(|s| s.parse::<u32>().ok())
-            .collect()
-    };
+    let parse_version =
+        |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse::<u32>().ok()).collect() };
 
     let latest_parts = parse_version(latest);
     let current_parts = parse_version(current);
@@ -210,8 +216,7 @@ pub fn load_update_settings() -> Result<UpdateSettings, String> {
     let content = std::fs::read_to_string(&settings_path)
         .map_err(|e| format!("Failed to read settings file: {}", e))?;
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse settings: {}", e))
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))
 }
 
 /// Save update settings to config file
@@ -281,8 +286,9 @@ pub async fn brew_upgrade_cask() -> Result<String, String> {
         std::time::Duration::from_secs(180),
         tokio::process::Command::new(brew_path)
             .args(["upgrade", "--cask", "antigravity-tools"])
-            .output()
-    ).await;
+            .output(),
+    )
+    .await;
 
     let output = match result {
         Ok(Ok(output)) => output,
@@ -303,7 +309,10 @@ pub async fn brew_upgrade_cask() -> Result<String, String> {
         logger::log_info(&format!("Homebrew upgrade succeeded: {}", stdout));
         Ok(stdout)
     } else {
-        logger::log_error(&format!("brew upgrade failed - stdout: {} stderr: {}", stdout, stderr));
+        logger::log_error(&format!(
+            "brew upgrade failed - stdout: {} stderr: {}",
+            stdout, stderr
+        ));
         // Return structured error key for frontend i18n
         if stderr.contains("already installed") || stdout.contains("already installed") {
             Err("brew_already_latest".to_string())
@@ -323,7 +332,7 @@ mod tests {
         assert!(compare_versions("3.3.36", "3.3.35"));
         assert!(compare_versions("3.4.0", "3.3.35"));
         assert!(compare_versions("4.0.3", "3.3.35"));
-        
+
         // Test that older or equal versions are not detected as updates
         assert!(!compare_versions("3.3.34", "3.3.35"));
         assert!(!compare_versions("3.3.35", "3.3.35"));
@@ -338,7 +347,7 @@ mod tests {
 
         // Test: current >= min (should not be BelowMinimum)
         assert!(!compare_versions(min, current));
-        
+
         // Test: current < latest (should be UpdateAvailable)
         assert!(compare_versions(latest, current));
 

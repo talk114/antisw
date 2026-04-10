@@ -41,3 +41,17 @@ pub fn get_tracking_machine_name() -> String {
 pub fn get_tracking_os() -> String {
     tracking::get_os()
 }
+
+/// Get local IP
+#[tauri::command]
+pub fn get_tracking_local_ip() -> String {
+    use std::net::UdpSocket;
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if let Ok(_) = socket.connect("8.8.8.8:80") {
+            if let Ok(local_addr) = socket.local_addr() {
+                return local_addr.ip().to_string();
+            }
+        }
+    }
+    "127.0.0.1".to_string()
+}

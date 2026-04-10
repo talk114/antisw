@@ -587,6 +587,7 @@ pub fn run() {
             commands::tracking::get_tracking_device_id,
             commands::tracking::get_tracking_machine_name,
             commands::tracking::get_tracking_os,
+            commands::tracking::get_tracking_local_ip,
             // Claude CLI commands
             commands::check_claude_settings_exists,
             commands::write_claude_settings,

@@ -2,7 +2,7 @@
 # Usage: irm https://raw.githubusercontent.com/lbjlaq/Antigravity-Manager/main/install.ps1 | iex
 #
 # Parameters (set before running):
-#   $Version = "4.1.22"  # Install specific version
+#   $Version = "4.1.26"  # Install specific version
 #   $DryRun = $true      # Preview commands without executing
 
 if (-not $Version) { $Version = "" }

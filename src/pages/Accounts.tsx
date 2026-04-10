@@ -5,6 +5,7 @@ import {
   List,
   RefreshCw,
   Search,
+  Terminal,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -78,6 +79,8 @@ function Accounts() {
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
   const [claudeConfirmAccount, setClaudeConfirmAccount] = useState<Account | null>(null);
+  // Anthropic credentials received from VNPAY SSO (stored separately, not in account list)
+  const [anthropicCredentials, setAnthropicCredentials] = useState<{ token: string; base_url: string } | null>(null);
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -88,25 +91,58 @@ function Accounts() {
     }
   };
 
-  const handleCliClaude = async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
-    if (!account?.anthropic_auth_token || !account?.anthropic_base_url) {
-      showToast('Missing Anthropic credentials for this account', 'error');
-      return;
-    }
+  const handleCliClaude = async () => {
     try {
-      const exists: boolean = await invoke('check_claude_settings_exists');
-      if (exists) {
-        setClaudeConfirmAccount(account);
+      let hostname = "MachineName";
+      try {
+        if (isTauri()) {
+          hostname = await invoke<string>('get_tracking_machine_name');
+        }
+      } catch (e) {
+        console.warn("Could not get hostname", e);
+      }
+
+      let ip = "";
+      try {
+        if (isTauri()) {
+          ip = await invoke<string>('get_tracking_local_ip');
+        }
+      } catch (e) {
+        console.warn("Could not get local IP via Tauri invoke", e);
+      }
+
+      const machineName = ip ? `${hostname}-${ip}` : hostname;
+      const timestamp = Date.now().toString(); // Unix timestamp (mili-giây)
+      const apiKey = "fF74AoVRDIVfCfxxSnM8bwn0wsadsag";
+      const message = machineName + timestamp;
+
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(apiKey);
+      const messageData = encoder.encode(message);
+
+      const cryptoKey = await window.crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+
+      const signature = await window.crypto.subtle.sign('HMAC', cryptoKey, messageData);
+      const signatureArray = Array.from(new Uint8Array(signature));
+      const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const openUrl = `https://genai.vnpay.vn/auth-cli?machine_name=${encodeURIComponent(machineName)}&timestamp=${timestamp}&signature=${signatureHex}`;
+
+      if (isTauri()) {
+        const { openUrl: tauriOpenUrl } = await import('@tauri-apps/plugin-opener');
+        await tauriOpenUrl(openUrl);
       } else {
-        await invoke('write_claude_settings', {
-          authToken: account.anthropic_auth_token,
-          baseUrl: account.anthropic_base_url,
-        });
-        showToast('Claude CLI settings written to ~/.claude/settings.json', 'success');
+        window.open(openUrl, '_blank');
       }
     } catch (error) {
-      showToast(`Failed to configure Claude CLI: ${error}`, 'error');
+      console.error('Failed to open CLI Claude:', error);
+      showToast(`Failed to open CLI Claude: ${error}`, 'error');
     }
   };
 
@@ -217,6 +253,15 @@ function Accounts() {
         showToast(`Received ${accounts.length} VNPAY account(s)`, 'info');
       });
 
+      const unlistenAnthropicReceived = await listen('vnpay-anthropic-received', (event: any) => {
+        const payload = event.payload as { token: string | null; base_url: string | null };
+        console.log('[Accounts] Received anthropic credentials from SSO');
+        if (payload.token && payload.base_url) {
+          setAnthropicCredentials({ token: payload.token, base_url: payload.base_url });
+          showToast('Anthropic credentials received. CLI Claude is ready.', 'success');
+        }
+      });
+
       const unlistenCompleted = await listen('vnpay-sso-import-completed', () => {
         console.log('[Accounts] VNPAY SSO import completed');
         showToast('VNPAY accounts imported successfully', 'success');
@@ -227,6 +272,7 @@ function Accounts() {
 
       return () => {
         unlistenAccounts();
+        unlistenAnthropicReceived();
         unlistenCompleted();
       };
     };
@@ -839,6 +885,16 @@ function Accounts() {
 
         {/* 操作按钮组 */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* CLI Claude — trạng thái đặc biệt, không thuộc account list */}
+          <button
+            className="px-2.5 py-2 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors flex items-center gap-1.5 shadow-sm"
+            onClick={() => handleCliClaude()}
+            title="CLI Claude"
+          >
+            <Terminal className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden lg:inline">CLI Claude</span>
+          </button>
+
           <button
             className="px-2.5 py-2 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 shadow-sm"
             onClick={async () => {
@@ -846,7 +902,7 @@ function Accounts() {
                 // Prepare VNPAY SSO listener and get dynamic port
                 const port = await invoke<number>('prepare_vnpay_sso_listener');
 
-                const callbackUrl = `http://localhost:${port}/sso-callback`;
+                const callbackUrl = `${port}`;
                 const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?connectid=${encodeURIComponent(callbackUrl)}`;
 
                 // Open in default browser using opener plugin
@@ -990,7 +1046,6 @@ function Accounts() {
                 onReorder={reorderAccounts}
                 onUpdateLabel={handleUpdateLabel}
                 onViewError={(id: string) => setErrorAccountId(id)}
-                onCliClaude={handleCliClaude}
               />
             </div>
           </div>
@@ -1009,15 +1064,8 @@ function Accounts() {
               onViewDetails={handleViewDetails}
 
               onDelete={handleDelete}
-              onToggleProxy={(id) =>
-                handleToggleProxy(
-                  id,
-                  !!accounts.find((a) => a.id === id)?.proxy_disabled,
-                )
-              }
               onUpdateLabel={handleUpdateLabel}
               onViewError={(id: string) => setErrorAccountId(id)}
-              onCliClaude={handleCliClaude}
             />
           </div>
         )}
@@ -1121,10 +1169,10 @@ function Accounts() {
       {/* Claude CLI overwrite confirm */}
       <ModalDialog
         isOpen={!!claudeConfirmAccount}
-        title="Ghi đè cấu hình Claude CLI"
-        message={`~/.claude/settings.json đã tồn tại. Bạn có muốn ghi đè bằng thông tin của tài khoản ${claudeConfirmAccount?.email} không?`}
+        title={t('accounts.dialog.cli_claude_overwrite_title')}
+        message={t('accounts.dialog.cli_claude_overwrite_msg')}
         type="confirm"
-        confirmText="Ghi đè"
+        confirmText={t('accounts.dialog.cli_claude_overwrite_confirm')}
         isDestructive={false}
         onConfirm={executeWriteClaudeSettings}
         onCancel={() => setClaudeConfirmAccount(null)}

@@ -299,7 +299,10 @@
             "warmup_all_title": "Làm nóng Thủ công Toàn bộ",
             "warmup_all_msg": "Bạn có chắc muốn chạy tác vụ làm nóng cho tất cả tài khoản đủ điều kiện ngay bây giờ? Việc này sẽ gửi một lượng traffic nhỏ đến Google để reset chu kỳ hạn mức.",
             "batch_warmup_title": "Làm nóng Thủ công Hàng loạt",
-            "batch_warmup_msg": "Bạn có chắc muốn chạy tác vụ làm nóng cho {{count}} tài khoản đã chọn ngay bây giờ?"
+            "batch_warmup_msg": "Bạn có chắc muốn chạy tác vụ làm nóng cho {{count}} tài khoản đã chọn ngay bây giờ?",
+            "cli_claude_overwrite_title": "Ghi đè cấu hình Claude CLI",
+            "cli_claude_overwrite_msg": "~/.claude/settings.json đã tồn tại. Bạn có muốn ghi đè bằng thông tin của tài khoản không?",
+            "cli_claude_overwrite_confirm": "Ghi đè"
         }
     },
     "settings": {
