@@ -78,9 +78,6 @@ function Accounts() {
   } | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
-  const [claudeConfirmAccount, setClaudeConfirmAccount] = useState<Account | null>(null);
-  // Anthropic credentials received from VNPAY SSO (stored separately, not in account list)
-  const [anthropicCredentials, setAnthropicCredentials] = useState<{ token: string; base_url: string } | null>(null);
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -143,21 +140,6 @@ function Accounts() {
     } catch (error) {
       console.error('Failed to open CLI Claude:', error);
       showToast(`Failed to open CLI Claude: ${error}`, 'error');
-    }
-  };
-
-  const executeWriteClaudeSettings = async () => {
-    if (!claudeConfirmAccount) return;
-    try {
-      await invoke('write_claude_settings', {
-        authToken: claudeConfirmAccount.anthropic_auth_token!,
-        baseUrl: claudeConfirmAccount.anthropic_base_url!,
-      });
-      showToast('Claude CLI settings overwritten successfully', 'success');
-    } catch (error) {
-      showToast(`Failed to write Claude CLI settings: ${error}`, 'error');
-    } finally {
-      setClaudeConfirmAccount(null);
     }
   };
 
@@ -253,15 +235,6 @@ function Accounts() {
         showToast(`Received ${accounts.length} VNPAY account(s)`, 'info');
       });
 
-      const unlistenAnthropicReceived = await listen('vnpay-anthropic-received', (event: any) => {
-        const payload = event.payload as { token: string | null; base_url: string | null };
-        console.log('[Accounts] Received anthropic credentials from SSO');
-        if (payload.token && payload.base_url) {
-          setAnthropicCredentials({ token: payload.token, base_url: payload.base_url });
-          showToast('Anthropic credentials received. CLI Claude is ready.', 'success');
-        }
-      });
-
       const unlistenCompleted = await listen('vnpay-sso-import-completed', () => {
         console.log('[Accounts] VNPAY SSO import completed');
         showToast('VNPAY accounts imported successfully', 'success');
@@ -272,7 +245,6 @@ function Accounts() {
 
       return () => {
         unlistenAccounts();
-        unlistenAnthropicReceived();
         unlistenCompleted();
       };
     };
@@ -1165,19 +1137,6 @@ function Accounts() {
         account={detailsAccount}
         onClose={() => setDetailsAccount(null)}
       />
-
-      {/* Claude CLI overwrite confirm */}
-      <ModalDialog
-        isOpen={!!claudeConfirmAccount}
-        title={t('accounts.dialog.cli_claude_overwrite_title')}
-        message={t('accounts.dialog.cli_claude_overwrite_msg')}
-        type="confirm"
-        confirmText={t('accounts.dialog.cli_claude_overwrite_confirm')}
-        isDestructive={false}
-        onConfirm={executeWriteClaudeSettings}
-        onCancel={() => setClaudeConfirmAccount(null)}
-      />
-
       {/* 账号错误详情弹窗 */}
       <AccountErrorDialog
         account={accounts.find(a => a.id === errorAccountId) || null}
