@@ -368,7 +368,7 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
                             <ToggleLeft className="w-3.5 h-3.5" />
                         )}
                     </button>
-                    {account.account_type === 'anthropic' && onCliClaude && (
+                    {onCliClaude && (
                         <button
                             className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-lg transition-all"
                             onClick={(e) => { e.stopPropagation(); onCliClaude(); }}

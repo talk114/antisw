@@ -847,7 +847,7 @@ function Accounts() {
                 const port = await invoke<number>('prepare_vnpay_sso_listener');
 
                 const callbackUrl = `http://localhost:${port}/sso-callback`;
-                const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?urlcallback=${encodeURIComponent(callbackUrl)}`;
+                const vnpayAuthUrl = `https://genai.vnpay.vn/create-token?connectid=${encodeURIComponent(callbackUrl)}`;
 
                 // Open in default browser using opener plugin
                 if (isTauri()) {
