@@ -78,6 +78,8 @@ function Accounts() {
   } | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
+  const [cliVnpayInstalled, setCliVnpayInstalled] = useState(false);
+  const [cliVnpayBusy, setCliVnpayBusy] = useState(false);
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -140,6 +142,51 @@ function Accounts() {
     } catch (error) {
       console.error('Failed to open CLI Claude:', error);
       showToast(`Failed to open CLI Claude: ${error}`, 'error');
+    }
+  };
+
+  const refreshCliVnpayStatus = async () => {
+    if (!isTauri()) return;
+    try {
+      const installed = await invoke<boolean>('check_claude_vnpay_installed');
+      setCliVnpayInstalled(installed);
+    } catch (e) {
+      console.warn('check_claude_vnpay_installed failed', e);
+    }
+  };
+
+  const handleCliVnpayInstall = async () => {
+    if (cliVnpayBusy) return;
+    setCliVnpayBusy(true);
+    try {
+      if (!isTauri()) {
+        showToast('CLI VNPAY chỉ khả dụng ở chế độ Desktop', 'error');
+        return;
+      }
+      const port = await invoke<number>('prepare_vnpay_jwt_listener');
+      const authUrl = `https://genai.vnpay.vn/create-jwt-token?connectid=${encodeURIComponent(String(port))}`;
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(authUrl);
+      showToast('Đang chờ JWT từ trình duyệt...', 'info');
+    } catch (error) {
+      console.error('CLI VNPAY install failed:', error);
+      showToast(`CLI VNPAY lỗi: ${error}`, 'error');
+      setCliVnpayBusy(false);
+    }
+  };
+
+  const handleCliVnpayUninstall = async () => {
+    if (cliVnpayBusy) return;
+    setCliVnpayBusy(true);
+    try {
+      await invoke<void>('remove_claude_vnpay_settings');
+      await refreshCliVnpayStatus();
+      showToast('Đã gỡ CLI VNPAY khỏi settings.json', 'success');
+    } catch (error) {
+      console.error('CLI VNPAY uninstall failed:', error);
+      showToast(`Gỡ CLI VNPAY lỗi: ${error}`, 'error');
+    } finally {
+      setCliVnpayBusy(false);
     }
   };
 
@@ -226,6 +273,16 @@ function Accounts() {
   useEffect(() => {
     if (!isTauri()) return;
 
+    // Bootstrap CLI VNPAY status & best-effort OTel profile setup
+    refreshCliVnpayStatus();
+    invoke<boolean>('ensure_otel_telemetry_env')
+      .then((added) => {
+        if (added) {
+          showToast('Đã thêm OTel telemetry vào shell profile', 'info');
+        }
+      })
+      .catch((e) => console.warn('ensure_otel_telemetry_env failed', e));
+
     const setupListeners = async () => {
       const { listen } = await import('@tauri-apps/api/event');
 
@@ -243,9 +300,17 @@ function Accounts() {
         fetchCurrentAccount();
       });
 
+      const unlistenCliJwt = await listen('vnpay-cli-jwt-installed', () => {
+        console.log('[Accounts] CLI VNPAY JWT installed');
+        showToast('CLI VNPAY đã được cấu hình vào settings.json', 'success');
+        setCliVnpayBusy(false);
+        refreshCliVnpayStatus();
+      });
+
       return () => {
         unlistenAccounts();
         unlistenCompleted();
+        unlistenCliJwt();
       };
     };
 
@@ -865,6 +930,25 @@ function Accounts() {
           >
             <Terminal className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden lg:inline">CLI Claude</span>
+          </button>
+
+          {/* CLI VNPAY — toggle JWT install/uninstall in ~/.claude/settings.json */}
+          <button
+            className={cn(
+              "px-2.5 py-2 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm",
+              cliVnpayInstalled
+                ? "bg-rose-600 hover:bg-rose-700"
+                : "bg-emerald-600 hover:bg-emerald-700",
+              cliVnpayBusy && "opacity-70 cursor-not-allowed",
+            )}
+            onClick={() => (cliVnpayInstalled ? handleCliVnpayUninstall() : handleCliVnpayInstall())}
+            disabled={cliVnpayBusy}
+            title={cliVnpayInstalled ? "GỠ CLI VNPAY" : "CLI VNPAY"}
+          >
+            <Terminal className={cn("w-3.5 h-3.5 shrink-0", cliVnpayBusy && "animate-pulse")} />
+            <span className="hidden lg:inline">
+              {cliVnpayInstalled ? "GỠ CLI VNPAY" : "CLI VNPAY"}
+            </span>
           </button>
 
           <button

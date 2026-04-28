@@ -591,6 +591,12 @@ pub fn run() {
             // Claude CLI commands
             commands::check_claude_settings_exists,
             commands::write_claude_settings,
+            // CLI VNPAY commands
+            commands::prepare_vnpay_jwt_listener,
+            commands::cancel_vnpay_jwt_listener,
+            commands::check_claude_vnpay_installed,
+            commands::remove_claude_vnpay_settings,
+            commands::ensure_otel_telemetry_env,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

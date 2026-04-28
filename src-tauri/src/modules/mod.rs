@@ -25,6 +25,7 @@ pub mod security_db;
 pub mod user_token_db;
 pub mod version;
 pub mod tracking;
+pub mod claude_settings;
 
 use crate::models;
 

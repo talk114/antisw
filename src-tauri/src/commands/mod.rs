@@ -476,6 +476,40 @@ pub async fn cancel_vnpay_sso_listener() -> Result<(), String> {
     Ok(())
 }
 
+/// Prepare VNPAY JWT (CLI VNPAY) listener and return its port (used as `connectid`).
+#[tauri::command]
+pub async fn prepare_vnpay_jwt_listener(app_handle: tauri::AppHandle) -> Result<u16, String> {
+    modules::logger::log_info("Preparing VNPAY JWT listener");
+    modules::oauth_server::prepare_vnpay_jwt_listener(Some(app_handle)).await
+}
+
+/// Cancel VNPAY JWT listener
+#[tauri::command]
+pub async fn cancel_vnpay_jwt_listener() -> Result<(), String> {
+    modules::logger::log_info("Cancelling VNPAY JWT listener");
+    modules::oauth_server::cancel_vnpay_jwt_listener();
+    Ok(())
+}
+
+/// Check whether ~/.claude/settings.json already has VNPAY env keys
+#[tauri::command]
+pub async fn check_claude_vnpay_installed() -> Result<bool, String> {
+    modules::claude_settings::has_vnpay_config()
+}
+
+/// Remove VNPAY env keys from ~/.claude/settings.json
+#[tauri::command]
+pub async fn remove_claude_vnpay_settings() -> Result<(), String> {
+    modules::claude_settings::remove_vnpay_config()
+}
+
+/// Ensure OTel telemetry env vars are exported in user shell profile.
+/// Returns true when at least one variable was newly added.
+#[tauri::command]
+pub async fn ensure_otel_telemetry_env() -> Result<bool, String> {
+    modules::claude_settings::ensure_otel_telemetry()
+}
+
 // --- 导入命令 ---
 
 #[tauri::command]

@@ -123,8 +123,15 @@ struct VnpaySsoState {
     accounts_tx: mpsc::Sender<Vec<VnpayAccount>>,
 }
 
+struct VnpayJwtState {
+    #[allow(dead_code)]
+    port: u16,
+    cancel_tx: watch::Sender<bool>,
+}
+
 static OAUTH_FLOW_STATE: OnceLock<Mutex<Option<OAuthFlowState>>> = OnceLock::new();
 static VNPAY_SSO_STATE: OnceLock<Mutex<Option<VnpaySsoState>>> = OnceLock::new();
+static VNPAY_JWT_STATE: OnceLock<Mutex<Option<VnpayJwtState>>> = OnceLock::new();
 
 fn get_oauth_flow_state() -> &'static Mutex<Option<OAuthFlowState>> {
     OAUTH_FLOW_STATE.get_or_init(|| Mutex::new(None))
@@ -132,6 +139,29 @@ fn get_oauth_flow_state() -> &'static Mutex<Option<OAuthFlowState>> {
 
 fn get_vnpay_sso_state() -> &'static Mutex<Option<VnpaySsoState>> {
     VNPAY_SSO_STATE.get_or_init(|| Mutex::new(None))
+}
+
+fn get_vnpay_jwt_state() -> &'static Mutex<Option<VnpayJwtState>> {
+    VNPAY_JWT_STATE.get_or_init(|| Mutex::new(None))
+}
+
+/// Extract `token` query parameter from an HTTP GET request line.
+fn extract_get_token(request: &str) -> String {
+    let first_line = request.lines().next().unwrap_or("");
+    let qs_idx = match first_line.find('?') {
+        Some(i) => i + 1,
+        None => return String::new(),
+    };
+    let query = first_line[qs_idx..]
+        .split(' ')
+        .next()
+        .unwrap_or("");
+    for pair in query.split('&') {
+        if let Some(rest) = pair.strip_prefix("token=") {
+            return url_decode(rest);
+        }
+    }
+    String::new()
 }
 
 fn oauth_success_html() -> &'static str {
@@ -1018,6 +1048,205 @@ pub fn cancel_vnpay_sso_listener() {
         if let Some(s) = state.take() {
             let _ = s.cancel_tx.send(true);
             crate::modules::logger::log_info("Cancelled VNPAY SSO listener");
+        }
+    }
+}
+
+/// Prepare VNPAY JWT listener for CLI VNPAY flow.
+/// Listens on `/sso-callback?token=<JWT>`, writes token to ~/.claude/settings.json,
+/// then emits "vnpay-cli-jwt-installed" event.
+/// Returns the port number (used as `connectid` in https://genai.vnpay.vn/create-jwt-token).
+pub async fn prepare_vnpay_jwt_listener(
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<u16, String> {
+    if let Ok(mut state) = get_vnpay_jwt_state().lock() {
+        if let Some(s) = state.take() {
+            let _ = s.cancel_tx.send(true);
+        }
+    }
+
+    let mut ipv4_listener: Option<TcpListener> = None;
+    let mut ipv6_listener: Option<TcpListener> = None;
+
+    let port: u16;
+    match TcpListener::bind("[::1]:0").await {
+        Ok(l6) => {
+            port = l6
+                .local_addr()
+                .map_err(|e| format!("failed_to_get_local_port: {}", e))?
+                .port();
+            ipv6_listener = Some(l6);
+
+            match TcpListener::bind(format!("127.0.0.1:{}", port)).await {
+                Ok(l4) => ipv4_listener = Some(l4),
+                Err(e) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "failed_to_bind_ipv4_jwt_port_127_0_0_1:{} (will only listen on IPv6): {}",
+                        port, e
+                    ));
+                }
+            }
+        }
+        Err(_) => {
+            let l4 = TcpListener::bind("127.0.0.1:0")
+                .await
+                .map_err(|e| format!("failed_to_bind_local_port: {}", e))?;
+            port = l4
+                .local_addr()
+                .map_err(|e| format!("failed_to_get_local_port: {}", e))?
+                .port();
+            ipv4_listener = Some(l4);
+
+            match TcpListener::bind(format!("[::1]:{}", port)).await {
+                Ok(l6) => ipv6_listener = Some(l6),
+                Err(e) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "failed_to_bind_ipv6_jwt_port_::1:{} (will only listen on IPv4): {}",
+                        port, e
+                    ));
+                }
+            }
+        }
+    }
+
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+
+    async fn handle_request(
+        mut stream: tokio::net::TcpStream,
+        app_handle: Option<tauri::AppHandle>,
+    ) -> bool {
+        let mut buffer = [0u8; 8192];
+        let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
+        if bytes_read == 0 {
+            return false;
+        }
+        let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+
+        if !request.contains("/sso-callback") {
+            let resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+            let _ = stream.write_all(resp.as_bytes()).await;
+            let _ = stream.flush().await;
+            return false;
+        }
+
+        let token = extract_get_token(&request);
+        if token.is_empty() {
+            let resp = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                <h1 style='color: red;'>&#x274C; Thiếu JWT</h1>\
+                <p>Không tìm thấy tham số token trong callback.</p>\
+                </body></html>";
+            let _ = stream.write_all(resp.as_bytes()).await;
+            let _ = stream.flush().await;
+            return false;
+        }
+
+        match crate::modules::claude_settings::apply_vnpay_jwt(&token) {
+            Ok(()) => {
+                // Best-effort OTel telemetry profile setup
+                let otel_added =
+                    crate::modules::claude_settings::ensure_otel_telemetry().unwrap_or(false);
+
+                let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                    <html><head><meta charset='utf-8'></head>\
+                    <body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                    <h1 style='color: green;'>&#x2705; CLI VNPAY đã sẵn sàng!</h1>\
+                    <p>Đã ghi token vào ~/.claude/settings.json. Cửa sổ này sẽ tự đóng...</p>\
+                    <script>setTimeout(function(){ window.close(); }, 800);</script>\
+                    </body></html>";
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.flush().await;
+
+                if let Some(h) = app_handle {
+                    use tauri::Emitter;
+                    #[derive(serde::Serialize, Clone)]
+                    struct Payload {
+                        otel_added: bool,
+                    }
+                    let _ = h.emit(
+                        "vnpay-cli-jwt-installed",
+                        Payload { otel_added },
+                    );
+                }
+                true
+            }
+            Err(e) => {
+                crate::modules::logger::log_error(&format!(
+                    "Failed to apply VNPAY JWT to settings: {}",
+                    e
+                ));
+                let body = format!(
+                    "<html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                    <h1 style='color: red;'>&#x274C; Ghi cấu hình thất bại</h1>\
+                    <p>{}</p></body></html>",
+                    e
+                );
+                let resp = format!(
+                    "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.flush().await;
+                false
+            }
+        }
+    }
+
+    if let Some(l4) = ipv4_listener {
+        let mut rx = cancel_rx.clone();
+        let app_handle = app_handle.clone();
+        tokio::spawn(async move {
+            loop {
+                let accept_result = tokio::select! {
+                    res = l4.accept() => res,
+                    _ = rx.changed() => break,
+                };
+                if let Ok((stream, _)) = accept_result {
+                    let app_handle = app_handle.clone();
+                    let done = handle_request(stream, app_handle).await;
+                    if done {
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    if let Some(l6) = ipv6_listener {
+        let mut rx = cancel_rx.clone();
+        let app_handle = app_handle.clone();
+        tokio::spawn(async move {
+            loop {
+                let accept_result = tokio::select! {
+                    res = l6.accept() => res,
+                    _ = rx.changed() => break,
+                };
+                if let Ok((stream, _)) = accept_result {
+                    let app_handle = app_handle.clone();
+                    let done = handle_request(stream, app_handle).await;
+                    if done {
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    if let Ok(mut state) = get_vnpay_jwt_state().lock() {
+        *state = Some(VnpayJwtState { port, cancel_tx });
+    }
+
+    crate::modules::logger::log_info(&format!("VNPAY JWT listener started on port {}", port));
+    Ok(port)
+}
+
+/// Cancel VNPAY JWT listener
+pub fn cancel_vnpay_jwt_listener() {
+    if let Ok(mut state) = get_vnpay_jwt_state().lock() {
+        if let Some(s) = state.take() {
+            let _ = s.cancel_tx.send(true);
+            crate::modules::logger::log_info("Cancelled VNPAY JWT listener");
         }
     }
 }
