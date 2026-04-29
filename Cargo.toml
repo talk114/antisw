@@ -1,6 +1,6 @@
 [package]
 name = "antigravity_sw"
-version = "4.1.28"
+version = "4.1.29"
 description = "Anti AI Switcher App"
 authors = ["you"]
 license = "CC-BY-NC-SA-4.0"
@@ -13,6 +13,7 @@ edition = "2021"
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "antigravity_sw_lib"
+path = "src-tauri"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
