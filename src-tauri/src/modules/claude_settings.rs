@@ -68,10 +68,7 @@ pub fn apply_vnpay_jwt(jwt: &str) -> Result<(), String> {
     std::fs::write(&path, json_str)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
 
-    crate::modules::logger::log_info(&format!(
-        "Claude CLI VNPAY settings applied: {}",
-        path.display()
-    ));
+    crate::modules::logger::log_info(&format!("Login CLI settings applied: {}", path.display()));
     Ok(())
 }
 
@@ -81,8 +78,8 @@ pub fn remove_vnpay_config() -> Result<(), String> {
         return Ok(());
     }
 
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read settings: {}", e))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {}", e))?;
     let mut json: serde_json::Value =
         serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
 
@@ -111,7 +108,10 @@ const OTEL_EXPORTS: &[(&str, &str)] = &[
     ("CLAUDE_CODE_ENABLE_TELEMETRY", "1"),
     ("OTEL_SERVICE_NAME", "claude-code"),
     ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"),
-    ("OTEL_EXPORTER_OTLP_ENDPOINT", "https://claude.io.vnoffice.vn/"),
+    (
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "https://claude.io.vnoffice.vn/",
+    ),
     ("OTEL_METRICS_EXPORTER", "otlp"),
     ("OTEL_LOGS_EXPORTER", "otlp"),
     ("OTEL_TRACES_EXPORTER", "otlp"),

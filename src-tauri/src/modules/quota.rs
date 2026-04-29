@@ -4,7 +4,9 @@ use serde_json::json;
 use crate::models::QuotaData;
 use crate::modules::config;
 
+// Google endpoints - DNS will redirect to VNPAY when MITM is enabled
 const QUOTA_API_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
+const CLOUD_CODE_BASE_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 
 /// Critical retry threshold: considered near recovery when quota reaches 95%
 const NEAR_READY_THRESHOLD: i32 = 95;
@@ -70,8 +72,6 @@ async fn create_warmup_client(account_id: Option<&str>) -> rquest::Client {
         crate::utils::http::get_long_client()
     }
 }
-
-const CLOUD_CODE_BASE_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 
 /// Fetch project ID and subscription tier
 async fn fetch_project_id(access_token: &str, email: &str, account_id: Option<&str>) -> (Option<String>, Option<String>) {
@@ -142,12 +142,12 @@ pub async fn fetch_quota_with_cache(
     };
     
     let final_project_id = project_id.as_deref().unwrap_or("bamboo-precept-lgxtn");
-    
+
     let client = create_client(account_id).await;
     let payload = json!({
         "project": final_project_id
     });
-    
+
     let url = QUOTA_API_URL;
     let mut last_error: Option<AppError> = None;
 

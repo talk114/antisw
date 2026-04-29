@@ -26,6 +26,7 @@ pub mod user_token_db;
 pub mod version;
 pub mod tracking;
 pub mod claude_settings;
+pub mod hosts_redirect;
 
 use crate::models;
 

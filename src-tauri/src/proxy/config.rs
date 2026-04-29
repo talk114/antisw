@@ -122,6 +122,79 @@ pub fn update_image_thinking_mode(mode: Option<String>) {
     }
 }
 
+// ============================================================================
+// 全局 VNPAY DNS Redirect 配置存储
+// 用于 redirect request từ Google API sang VNPAY endpoint
+// ============================================================================
+static GLOBAL_VNPAY_DNS_REDIRECT: OnceLock<RwLock<VnpayDnsRedirectConfig>> = OnceLock::new();
+
+pub fn get_vnpay_dns_redirect_config() -> VnpayDnsRedirectConfig {
+    GLOBAL_VNPAY_DNS_REDIRECT
+        .get()
+        .and_then(|lock| lock.read().ok())
+        .map(|cfg| cfg.clone())
+        .unwrap_or_default()
+}
+
+pub fn update_vnpay_dns_redirect_config(config: VnpayDnsRedirectConfig) {
+    if let Some(lock) = GLOBAL_VNPAY_DNS_REDIRECT.get() {
+        if let Ok(mut cfg) = lock.write() {
+            *cfg = config.clone();
+            tracing::info!(
+                "[VNPAY-DNS-Redirect] Config updated: enabled={}, {} -> {}{}",
+                config.enabled,
+                config.source_host,
+                config.target_host,
+                config.target_path_prefix
+            );
+        }
+    } else {
+        let _ = GLOBAL_VNPAY_DNS_REDIRECT.set(RwLock::new(config.clone()));
+        tracing::info!(
+            "[VNPAY-DNS-Redirect] Config initialized: enabled={}, {} -> {}{}",
+            config.enabled,
+            config.source_host,
+            config.target_host,
+            config.target_path_prefix
+        );
+    }
+}
+
+/// Chuyển đổi URL theo VNPAY DNS redirect config
+/// Trả về URL mới nếu redirect được enabled và URL match source_host
+/// Trả về None nếu không cần redirect
+pub fn transform_url_for_vnpay(url: &str) -> Option<String> {
+    let config = get_vnpay_dns_redirect_config();
+    if !config.enabled {
+        return None;
+    }
+
+    // Parse URL để kiểm tra host
+    match reqwest::Url::parse(url) {
+        Ok(parsed) => {
+            if parsed.host_str() == Some(&config.source_host) {
+                // Xây dựng URL mới với target host và path prefix
+                let path = parsed.path();
+                let new_url = format!(
+                    "{}{}{}",
+                    config.target_host,
+                    config.target_path_prefix.trim_end_matches('/'),
+                    path
+                );
+                tracing::debug!(
+                    "[VNPAY-DNS-Redirect] Transforming URL: {} -> {}",
+                    url,
+                    new_url
+                );
+                Some(new_url)
+            } else {
+                None
+            }
+        }
+        Err(_) => None,
+    }
+}
+
 /// 全局系统提示词配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalSystemPromptConfig {
@@ -556,6 +629,43 @@ pub struct ProxyConfig {
     /// 代理池配置
     #[serde(default)]
     pub proxy_pool: ProxyPoolConfig,
+
+    /// VNPAY DNS Redirect 配置
+    /// Chuyển hướng request từ Google API sang VNPAY endpoint
+    #[serde(default)]
+    pub vnpay_dns_redirect: VnpayDnsRedirectConfig,
+}
+
+/// VNPAY DNS Redirect 配置
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VnpayDnsRedirectConfig {
+    /// 是否启用 DNS redirect
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Source host cần redirect (default: "daily-cloudcode-pa.googleapis.com")
+    #[serde(default = "default_source_host")]
+    pub source_host: String,
+
+    /// Target host (default: "genai.vnpay.vn")
+    #[serde(default = "default_target_host")]
+    pub target_host: String,
+
+    /// Target path prefix (default: "/aicoding")
+    #[serde(default = "default_target_path_prefix")]
+    pub target_path_prefix: String,
+}
+
+fn default_source_host() -> String {
+    "daily-cloudcode-pa.googleapis.com".to_string()
+}
+
+fn default_target_host() -> String {
+    "genai.vnpay.vn".to_string()
+}
+
+fn default_target_path_prefix() -> String {
+    "/aicoding".to_string()
 }
 
 /// 上游代理配置
@@ -593,6 +703,7 @@ impl Default for ProxyConfig {
             global_system_prompt: GlobalSystemPromptConfig::default(),
             proxy_pool: ProxyPoolConfig::default(),
             image_thinking_mode: None,
+            vnpay_dns_redirect: VnpayDnsRedirectConfig::default(),
         }
     }
 }

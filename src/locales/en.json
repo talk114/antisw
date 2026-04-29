@@ -192,7 +192,7 @@
         "switch_to": "Switch to this account",
         "actions": "Actions",
         "device_fingerprint": "Device Fingerprint",
-        "show_all_quotas": "Show All Quotas",
+        "show_all_quotas": "ShowAll",
         "device_fingerprint_dialog": {
             "title": "Device Fingerprint",
             "operations": "Device Fingerprint Operations",

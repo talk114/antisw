@@ -1151,7 +1151,6 @@ pub async fn prepare_vnpay_jwt_listener(
                     <html><head><meta charset='utf-8'></head>\
                     <body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
                     <h1 style='color: green;'>&#x2705; CLI VNPAY đã sẵn sàng!</h1>\
-                    <p>Đã ghi token vào ~/.claude/settings.json. Cửa sổ này sẽ tự đóng...</p>\
                     <script>setTimeout(function(){ window.close(); }, 800);</script>\
                     </body></html>";
                 let _ = stream.write_all(resp.as_bytes()).await;

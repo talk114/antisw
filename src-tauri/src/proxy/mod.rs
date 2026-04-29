@@ -25,17 +25,21 @@ pub mod session_manager; // 会话指纹管理
 pub mod signature_cache; // Signature Cache (v3.3.16)
 pub mod sticky_config; // 粘性调度配置
 pub mod upstream; // 上游客户端
+pub mod vnpay_mitm; // VNPAY Transparent MITM Proxy
 pub mod zai_vision_mcp; // Built-in Vision MCP server state
 pub mod zai_vision_tools; // Built-in Vision MCP tools (z.ai vision API) // 调试日志
 
 pub use config::update_global_system_prompt_config;
 pub use config::update_thinking_budget_config;
 pub use config::update_image_thinking_mode;
+pub use config::update_vnpay_dns_redirect_config;
 pub use config::ProxyAuthMode;
 pub use config::ProxyConfig;
 pub use config::ProxyPoolConfig;
+pub use config::VnpayDnsRedirectConfig;
 pub use config::ZaiConfig;
 pub use config::ZaiDispatchMode;
+pub use config::transform_url_for_vnpay;
 pub use security::ProxySecurityConfig;
 pub use server::AxumServer;
 pub use signature_cache::SignatureCache;

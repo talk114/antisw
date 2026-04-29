@@ -469,6 +469,8 @@ pub fn run() {
             commands::set_window_theme,
             commands::get_antigravity_path,
             commands::get_antigravity_args,
+            commands::enable_antigravity_vnpay_mode,
+            commands::get_vnpay_mitm_status,
             commands::check_for_updates,
             commands::check_homebrew_installation,
             commands::brew_upgrade_cask,

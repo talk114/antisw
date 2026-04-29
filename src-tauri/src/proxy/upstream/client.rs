@@ -44,7 +44,7 @@ pub fn mask_email(email: &str) -> String {
 }
 
 // Cloud Code v1internal endpoints (fallback order: Sandbox → Daily → Prod)
-// 优先使用 Sandbox/Daily 环境以避免 Prod环境的 429 错误 (Ref: Issue #1176)
+// DNS redirect will route these to VNPAY when MITM is enabled
 const V1_INTERNAL_BASE_URL_PROD: &str = "https://cloudcode-pa.googleapis.com/v1internal";
 const V1_INTERNAL_BASE_URL_DAILY: &str = "https://daily-cloudcode-pa.googleapis.com/v1internal";
 const V1_INTERNAL_BASE_URL_SANDBOX: &str =
@@ -335,10 +335,13 @@ impl UpstreamClient {
         // [NEW] 收集降级尝试记录
         let mut fallback_attempts: Vec<FallbackAttemptLog> = Vec::new();
 
+        let fallbacks = &V1_INTERNAL_BASE_URL_FALLBACKS;
+        let fallbacks_len = fallbacks.len();
+
         // 遍历所有端点，失败时自动切换
-        for (idx, base_url) in V1_INTERNAL_BASE_URL_FALLBACKS.iter().enumerate() {
+        for (idx, base_url) in fallbacks.iter().enumerate() {
             let url = Self::build_url(base_url, method, query_string);
-            let has_next = idx + 1 < V1_INTERNAL_BASE_URL_FALLBACKS.len();
+            let has_next = idx + 1 < fallbacks_len;
 
             let response = client
                 .post(&url)
@@ -356,7 +359,7 @@ impl UpstreamClient {
                                 "✓ Upstream fallback succeeded | Endpoint: {} | Status: {} | Next endpoints available: {}",
                                 base_url,
                                 status,
-                                V1_INTERNAL_BASE_URL_FALLBACKS.len() - idx - 1
+                                fallbacks_len - idx - 1
                             );
                         } else {
                             tracing::debug!(

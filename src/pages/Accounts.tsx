@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
+  Rocket,
   Search,
   Terminal,
   ToggleLeft,
@@ -62,6 +63,7 @@ function Accounts() {
     const saved = localStorage.getItem('accounts_view_mode');
     return (saved === 'list' || saved === 'grid') ? saved : 'list';
   });
+  const pendingSsoAction = useRef<'antigravity' | 'cli-vnpay' | null>(null);
 
   // Save view mode preference
   useEffect(() => {
@@ -80,6 +82,33 @@ function Accounts() {
   const [errorAccountId, setErrorAccountId] = useState<string | null>(null);
   const [cliVnpayInstalled, setCliVnpayInstalled] = useState(false);
   const [cliVnpayBusy, setCliVnpayBusy] = useState(false);
+  const [antigravityBusy, setAntigravityBusy] = useState(false);
+  const [vnpayModeEnabled, setVnpayModeEnabled] = useState(false);
+
+  const refreshVnpayMitmStatus = async () => {
+    if (!isTauri()) return;
+    try {
+      const [enabled] = await invoke<[boolean, string[]]>('get_vnpay_mitm_status');
+      setVnpayModeEnabled(enabled);
+    } catch (e) {
+      console.warn('get_vnpay_mitm_status failed', e);
+    }
+  };
+
+  const handleAntigravityUndo = async () => {
+    if (antigravityBusy) return;
+    setAntigravityBusy(true);
+    try {
+      await invoke('enable_antigravity_vnpay_mode', { enabled: false });
+      showToast('VNPAY Mode đã tắt - hosts file đã khôi phục', 'success');
+      await refreshVnpayMitmStatus();
+    } catch (error) {
+      console.error('Antigravity undo failed:', error);
+      showToast(`Không thể tắt VNPAY Mode: ${error}`, 'error');
+    } finally {
+      setAntigravityBusy(false);
+    }
+  };
 
   const handleUpdateLabel = async (accountId: string, label: string) => {
     try {
@@ -155,9 +184,12 @@ function Accounts() {
     }
   };
 
+
   const handleCliVnpayInstall = async () => {
     if (cliVnpayBusy) return;
     setCliVnpayBusy(true);
+    pendingSsoAction.current = 'cli-vnpay'; // ← đánh dấu nguồn
+
     try {
       if (!isTauri()) {
         showToast('CLI VNPAY chỉ khả dụng ở chế độ Desktop', 'error');
@@ -187,6 +219,30 @@ function Accounts() {
       showToast(`Gỡ CLI VNPAY lỗi: ${error}`, 'error');
     } finally {
       setCliVnpayBusy(false);
+    }
+  };
+
+  // Antigravity: Authenticate with VNPAY for Antigravity CLI mode
+  const handleAntigravityAuth = async () => {
+    if (antigravityBusy) return;
+    setAntigravityBusy(true);
+    pendingSsoAction.current = 'antigravity'; // ← đánh dấu nguồn
+    try {
+      if (!isTauri()) {
+        showToast('Antigravity chỉ khả dụng ở chế độ Desktop', 'error');
+        setAntigravityBusy(false);
+        return;
+      }
+      // Reuse VNPAY JWT listener - same auth flow
+      const port = await invoke<number>('prepare_vnpay_jwt_listener');
+      const authUrl = `https://genai.vnpay.vn/create-jwt-token?tool=ag&connectid=${encodeURIComponent(String(port))}`;
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(authUrl);
+      showToast('Đang chờ JWT từ trình duyệt...', 'info');
+    } catch (error) {
+      console.error('Antigravity auth failed:', error);
+      showToast(`Antigravity lỗi: ${error}`, 'error');
+      setAntigravityBusy(false);
     }
   };
 
@@ -301,10 +357,32 @@ function Accounts() {
       });
 
       const unlistenCliJwt = await listen('vnpay-cli-jwt-installed', () => {
-        console.log('[Accounts] CLI VNPAY JWT installed');
-        showToast('CLI VNPAY đã được cấu hình vào settings.json', 'success');
-        setCliVnpayBusy(false);
-        refreshCliVnpayStatus();
+        const action = pendingSsoAction.current;
+        pendingSsoAction.current = null; // reset ngay sau khi đọc
+
+        console.log('[Accounts] vnpay-cli-jwt-installed, triggered by:', action);
+
+        if (action === 'cli-vnpay') {
+          // ── Logic của nút CLI VNPAY ─────────────────────────────
+          showToast('CLI VNPAY đã được cấu hình vào settings.json', 'success');
+          setCliVnpayBusy(false);
+          refreshCliVnpayStatus();
+
+        } else if (action === 'antigravity') {
+          // ── Logic của nút Antigravity ───────────────────────────
+          showToast('Antigravity đã xác thực VNPAY thành công', 'success');
+          // Enable VNPAY mode in config - redirect API to VNPAY (free local model)
+          invoke('enable_antigravity_vnpay_mode', { enabled: true })
+            .then(() => showToast('VNPAY Mode đã bật - API chuyển sang VNPAY miễn phí', 'success'))
+            .catch((e) => console.warn('enable_antigravity_vnpay_mode failed', e));
+          setAntigravityBusy(false);
+
+        } else {
+          // Fallback nếu không rõ nguồn
+          console.warn('[Accounts] vnpay-cli-jwt-installed fired with unknown action');
+          setCliVnpayBusy(false);
+          setAntigravityBusy(false);
+        }
       });
 
       return () => {
@@ -756,18 +834,6 @@ function Accounts() {
 
       {/* 顶部工具栏:搜索、过滤和操作按钮 */}
       <div className="flex-none flex items-center gap-2">
-        {/* 搜索框 - 响应式:大屏显示输入框,小屏显示图标 */}
-        <div className="hidden lg:block flex-none w-40 relative transition-all focus-within:w-48">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder={t('accounts.search_placeholder')}
-            className="w-full pl-9 pr-4 py-2 bg-white dark:bg-base-100 text-sm text-gray-900 dark:text-base-content border border-gray-200 dark:border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
         {/* 搜索按钮 - 小屏显示 */}
         <div className="lg:hidden relative">
           {!isSearchExpanded ? (
@@ -951,6 +1017,20 @@ function Accounts() {
             </span>
           </button>
 
+          {/* Antigravity - Authenticate with VNPAY for Antigravity CLI */}
+          <button
+            className={cn(
+              "px-2.5 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shadow-sm",
+              antigravityBusy && "opacity-70 cursor-not-allowed",
+            )}
+            onClick={handleAntigravityAuth}
+            disabled={antigravityBusy}
+            title="Antigravity"
+          >
+            <Rocket className={cn("w-3.5 h-3.5 shrink-0", antigravityBusy && "animate-pulse")} />
+            <span className="hidden lg:inline">Antigravity</span>
+          </button>
+
           <button
             className="px-2.5 py-2 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-1.5 shadow-sm"
             onClick={async () => {
@@ -975,7 +1055,7 @@ function Accounts() {
             }}
           >
             <Users className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden lg:inline">SSO VNPAY</span>
+            <span className="hidden lg:inline">SYNC AG</span>
           </button>
 
           <AddAccountDialog onAdd={handleAddAccount} showText={false} />

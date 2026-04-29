@@ -378,6 +378,8 @@ pub async fn save_config(
         crate::proxy::update_global_system_prompt_config(config.proxy.global_system_prompt.clone());
         // [NEW] 更新全局图像思维模式配置
         crate::proxy::update_image_thinking_mode(config.proxy.image_thinking_mode.clone());
+        // [NEW] 更新 VNPAY DNS Redirect 配置
+        crate::proxy::update_vnpay_dns_redirect_config(config.proxy.vnpay_dns_redirect.clone());
         // 更新代理池配置
         instance
             .axum_server
@@ -812,6 +814,87 @@ pub async fn get_antigravity_args() -> Result<Vec<String>, String> {
         Some(args) => Ok(args),
         None => Err("未找到正在运行的 Antigravity 进程".to_string()),
     }
+}
+
+/// 启用 Antigravity VNPAY Mode (DNS redirect + MITM proxy)
+/// Khi Antigravity xác thực VNPAY thành công, bật flag này để redirect DNS sang VNPAY
+#[tauri::command]
+pub async fn enable_antigravity_vnpay_mode(enabled: bool) -> Result<(), String> {
+    let mut config = modules::load_app_config()?;
+    let old_value = config.antigravity_vnpay_enabled;
+    config.antigravity_vnpay_enabled = enabled;
+    modules::save_app_config(&config)?;
+
+    if enabled {
+        tracing::info!("[VNPAY-MITM] Enabling Antigravity VNPAY mode - DNS redirect for all apps");
+
+        // Resolve VNPAY IP
+        let target_ip = crate::modules::hosts_redirect::resolve_vnpay_ip().await;
+        tracing::info!("[VNPAY-MITM] VNPAY resolves to: {}", target_ip);
+
+        // Add hosts file entries (redirect Google domains to our IP)
+        match crate::modules::hosts_redirect::add_hosts_entries(&target_ip) {
+            Ok(_) => {
+                tracing::info!("[VNPAY-MITM] Hosts file updated - all apps will now use VNPAY");
+            }
+            Err(e) => {
+                tracing::warn!("[VNPAY-MITM] Failed to update hosts file: {}. Try running as admin.", e);
+            }
+        }
+
+        // Update global VNPAY DNS redirect config
+        crate::proxy::update_vnpay_dns_redirect_config(crate::proxy::VnpayDnsRedirectConfig {
+            enabled: true,
+            source_host: "daily-cloudcode-pa.googleapis.com".to_string(),
+            target_host: "genai.vnpay.vn".to_string(),
+            target_path_prefix: "/aicoding".to_string(),
+        });
+    } else {
+        tracing::info!("[VNPAY-MITM] Disabling Antigravity VNPAY mode");
+
+        // Remove hosts file entries
+        match crate::modules::hosts_redirect::remove_hosts_entries() {
+            Ok(_) => {
+                tracing::info!("[VNPAY-MITM] Hosts file restored - traffic back to Google");
+            }
+            Err(e) => {
+                tracing::warn!("[VNPAY-MITM] Failed to restore hosts file: {}", e);
+            }
+        }
+
+        // Disable global VNPAY DNS redirect config
+        crate::proxy::update_vnpay_dns_redirect_config(crate::proxy::VnpayDnsRedirectConfig {
+            enabled: false,
+            source_host: "daily-cloudcode-pa.googleapis.com".to_string(),
+            target_host: "genai.vnpay.vn".to_string(),
+            target_path_prefix: "/aicoding".to_string(),
+        });
+    }
+
+    tracing::info!(
+        "[VNPAY-MITM] Antigravity VNPAY mode changed: {} -> {}",
+        old_value,
+        enabled
+    );
+    Ok(())
+}
+
+/// Get VNPAY MITM status
+#[tauri::command]
+pub fn get_vnpay_mitm_status() -> (bool, Vec<String>) {
+    let config = modules::load_app_config().unwrap_or_default();
+    let hosts_active = crate::modules::hosts_redirect::has_hosts_entries();
+    let domains = if hosts_active {
+        vec![
+            "daily-cloudcode-pa.googleapis.com".to_string(),
+            "cloudcode-pa.googleapis.com".to_string(),
+            "generativelanguage.googleapis.com".to_string(),
+            "api.anthropic.com".to_string(),
+        ]
+    } else {
+        vec![]
+    };
+    (config.antigravity_vnpay_enabled || hosts_active, domains)
 }
 
 /// 检测更新响应结构
