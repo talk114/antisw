@@ -887,9 +887,10 @@ pub fn get_vnpay_mitm_status() -> (bool, Vec<String>) {
     let domains = if hosts_active {
         vec![
             "daily-cloudcode-pa.googleapis.com".to_string(),
+            "daily-cloudcode-pa.sandbox.googleapis.com".to_string(),
             "cloudcode-pa.googleapis.com".to_string(),
             "generativelanguage.googleapis.com".to_string(),
-            "api.anthropic.com".to_string(),
+            "generative-ai.googleapis.com".to_string(),
         ]
     } else {
         vec![]

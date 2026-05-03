@@ -1,5 +1,0 @@
-error: path `/Users/hieulv/webs/antisw/src-tauri` for lib `antigravity_sw_lib` is a directory, but a source file was expected.
- --> /Users/hieulv/webs/antisw/Cargo.toml
-error: path `/Users/hieulv/webs/antisw/src-tauri` for lib `antigravity_sw_lib` is a directory, but a source file was expected.
- --> /Users/hieulv/webs/antisw/Cargo.toml
-error: could not compile due to 2 previous target resolution errors

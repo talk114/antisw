@@ -19,29 +19,22 @@ const HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
 const MARKER_START: &str = "# ANTIGRAVITY-VNPAY-MITM-START";
 const MARKER_END: &str = "# ANTIGRAVITY-VNPAY-MITM-END";
 
+/// Target IP (VNPAY fixed IP)
+const VNPAY_TARGET_IP: &str = "103.67.184.135";
+
 /// Domains to redirect from Google to VNPAY
 const REDIRECT_DOMAINS: &[&str] = &[
     "daily-cloudcode-pa.googleapis.com",
+    "daily-cloudcode-pa.sandbox.googleapis.com",
     "cloudcode-pa.googleapis.com",
     "generativelanguage.googleapis.com",
-    "api.anthropic.com",
     "generative-ai.googleapis.com",
 ];
 
 /// Get the IP address of genai.vnpay.vn
 pub async fn resolve_vnpay_ip() -> String {
-    match tokio::net::lookup_host("genai.vnpay.vn:443").await {
-        Ok(mut addrs) => {
-            if let Some(addr) = addrs.next() {
-                return addr.ip().to_string();
-            }
-        }
-        Err(e) => {
-            tracing::warn!("[VNPAY-HOSTS] Failed to resolve genai.vnpay.vn: {}", e);
-        }
-    }
-    tracing::info!("[VNPAY-HOSTS] Falling back to 127.0.0.1");
-    "127.0.0.1".to_string()
+    // Use fixed IP instead of DNS resolution
+    VNPAY_TARGET_IP.to_string()
 }
 
 /// Generate hosts file entries
