@@ -17,6 +17,8 @@ pub mod proxy_pool;
 pub mod tracking;
 // 导出 user_token 命令
 pub mod user_token;
+// 导出 9router MITM 命令
+pub mod nine_router_mitm;
 
 /// 列出所有账号
 #[tauri::command]
@@ -818,31 +820,41 @@ pub async fn get_antigravity_args() -> Result<Vec<String>, String> {
 
 /// 启用 Antigravity VNPAY Mode (DNS redirect + MITM proxy)
 /// Khi Antigravity xác thực VNPAY thành công, bật flag này để redirect DNS sang VNPAY
+/// `sudo_password` — sudo password để ghi /etc/hosts (pipe qua stdin, không hiện popup tương tác)
 #[tauri::command]
-pub async fn enable_antigravity_vnpay_mode(enabled: bool) -> Result<(), String> {
+pub async fn enable_antigravity_vnpay_mode(
+    enabled: bool,
+    sudo_password: Option<String>,
+    redirect_ip: Option<String>,
+) -> Result<(), String> {
     let mut config = modules::load_app_config()?;
     let old_value = config.antigravity_vnpay_enabled;
     config.antigravity_vnpay_enabled = enabled;
     modules::save_app_config(&config)?;
 
     if enabled {
-        tracing::info!("[VNPAY-MITM] Enabling Antigravity VNPAY mode - DNS redirect for all apps");
+        tracing::info!("[VNPAY-MITM] Enabling Antigravity VNPAY mode");
 
-        // Resolve VNPAY IP
-        let target_ip = crate::modules::hosts_redirect::resolve_vnpay_ip().await;
-        tracing::info!("[VNPAY-MITM] VNPAY resolves to: {}", target_ip);
+        let target_ip = redirect_ip
+            .unwrap_or_else(|| "127.0.0.1".to_string());
 
-        // Add hosts file entries (redirect Google domains to our IP)
-        match crate::modules::hosts_redirect::add_hosts_entries(&target_ip) {
+        match crate::modules::hosts_redirect::add_hosts_entries(
+            &target_ip,
+            sudo_password.as_deref(),
+        ) {
             Ok(_) => {
-                tracing::info!("[VNPAY-MITM] Hosts file updated - all apps will now use VNPAY");
+                tracing::info!(
+                    "[VNPAY-MITM] Hosts file updated - {} → {}",
+                    target_ip,
+                    REDIRECT_DOMAINS.join(", ")
+                );
             }
             Err(e) => {
                 tracing::warn!("[VNPAY-MITM] Failed to update hosts file: {}. Try running as admin.", e);
+                // Vẫn tiếp tục — có thể đã chạy với quyền admin rồi
             }
         }
 
-        // Update global VNPAY DNS redirect config
         crate::proxy::update_vnpay_dns_redirect_config(crate::proxy::VnpayDnsRedirectConfig {
             enabled: true,
             source_host: "daily-cloudcode-pa.googleapis.com".to_string(),
@@ -852,8 +864,7 @@ pub async fn enable_antigravity_vnpay_mode(enabled: bool) -> Result<(), String> 
     } else {
         tracing::info!("[VNPAY-MITM] Disabling Antigravity VNPAY mode");
 
-        // Remove hosts file entries
-        match crate::modules::hosts_redirect::remove_hosts_entries() {
+        match crate::modules::hosts_redirect::remove_hosts_entries(sudo_password.as_deref()) {
             Ok(_) => {
                 tracing::info!("[VNPAY-MITM] Hosts file restored - traffic back to Google");
             }
@@ -862,7 +873,6 @@ pub async fn enable_antigravity_vnpay_mode(enabled: bool) -> Result<(), String> 
             }
         }
 
-        // Disable global VNPAY DNS redirect config
         crate::proxy::update_vnpay_dns_redirect_config(crate::proxy::VnpayDnsRedirectConfig {
             enabled: false,
             source_host: "daily-cloudcode-pa.googleapis.com".to_string(),
@@ -879,6 +889,12 @@ pub async fn enable_antigravity_vnpay_mode(enabled: bool) -> Result<(), String> 
     Ok(())
 }
 
+/// Danh sách các domain bị redirect
+const REDIRECT_DOMAINS: [&str; 2] = [
+    "daily-cloudcode-pa.googleapis.com",
+    "cloudcode-pa.googleapis.com"
+];
+
 /// Get VNPAY MITM status
 #[tauri::command]
 pub fn get_vnpay_mitm_status() -> (bool, Vec<String>) {
@@ -887,10 +903,7 @@ pub fn get_vnpay_mitm_status() -> (bool, Vec<String>) {
     let domains = if hosts_active {
         vec![
             "daily-cloudcode-pa.googleapis.com".to_string(),
-            "daily-cloudcode-pa.sandbox.googleapis.com".to_string(),
-            "cloudcode-pa.googleapis.com".to_string(),
-            "generativelanguage.googleapis.com".to_string(),
-            "generative-ai.googleapis.com".to_string(),
+            "cloudcode-pa.googleapis.com".to_string()
         ]
     } else {
         vec![]

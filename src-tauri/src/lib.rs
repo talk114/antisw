@@ -311,6 +311,7 @@ pub fn run() {
         }))
         .manage(commands::proxy::ProxyServiceState::new())
         .manage(commands::cloudflared::CloudflaredState::new())
+        .manage(commands::nine_router_mitm::NineRouterMitmState::new())
         .manage(AppRuntimeFlags { tray_enabled })
         .setup(|app| {
             info!("Setup starting...");
@@ -570,6 +571,12 @@ pub fn run() {
             commands::cloudflared::cloudflared_start,
             commands::cloudflared::cloudflared_stop,
             commands::cloudflared::cloudflared_get_status,
+            // 9Router MITM commands (antigravity)
+            commands::nine_router_mitm::nine_router_mitm_status,
+            commands::nine_router_mitm::nine_router_mitm_find_server,
+            commands::nine_router_mitm::nine_router_mitm_start,
+            commands::nine_router_mitm::nine_router_mitm_stop,
+            commands::nine_router_mitm::nine_router_mitm_hosts_active,
             // Debug console commands
             modules::log_bridge::enable_debug_console,
             modules::log_bridge::disable_debug_console,

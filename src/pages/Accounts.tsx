@@ -4,7 +4,6 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
-  Rocket,
   Search,
   Terminal,
   ToggleLeft,
@@ -12,6 +11,7 @@ import {
   Trash2,
   Upload,
   Users,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AccountDetailsDialog from "../components/accounts/AccountDetailsDialog";
@@ -84,6 +84,24 @@ function Accounts() {
   const [cliVnpayBusy, setCliVnpayBusy] = useState(false);
   const [antigravityBusy, setAntigravityBusy] = useState(false);
   const [vnpayModeEnabled, setVnpayModeEnabled] = useState(false);
+  const [mitmRunning, setMitmRunning] = useState(false);
+  const [mitmBusy, setMitmBusy] = useState(false);
+
+  // 9Router MITM status refresh (process + hosts file)
+  const refreshMitmStatus = async () => {
+    if (!isTauri()) return;
+    try {
+      const [status, hostsActive] = await Promise.all([
+        invoke<{ running: boolean; pid: number | null }>('nine_router_mitm_status'),
+        invoke<boolean>('nine_router_mitm_hosts_active'),
+      ]);
+      const active = status.running || hostsActive;
+      console.log('[9ROUTER-MITM] refreshMitmStatus: process_running=', status.running, 'hosts_active=', hostsActive, 'final_active=', active);
+      setMitmRunning(active);
+    } catch (e) {
+      console.warn('nine_router_mitm_status failed', e);
+    }
+  };
 
   const refreshVnpayMitmStatus = async () => {
     if (!isTauri()) return;
@@ -222,26 +240,50 @@ function Accounts() {
     }
   };
 
-  // Antigravity: Authenticate with VNPAY for Antigravity CLI mode
+  // Antigravity: Toggle MITM (start/stop) or trigger VNPAY auth when stopped
   const handleAntigravityAuth = async () => {
     if (antigravityBusy) return;
+
+    // If MITM is running, stop it (remove DNS + stop server)
+    if (mitmRunning) {
+      if (mitmBusy) return;
+      setMitmBusy(true);
+      try {
+        await invoke('nine_router_mitm_stop', { removeDns: true, sudoPassword: null });
+        showToast('Antigravity đã tắt - DNS đã khôi phục', 'success');
+        setMitmRunning(false);
+      } catch (error) {
+        console.error('Antigravity stop failed:', error);
+        showToast(`Antigravity lỗi: ${error}`, 'error');
+      } finally {
+        setMitmBusy(false);
+      }
+      return;
+    }
+
+    // MITM not running - start it with DNS redirect
     setAntigravityBusy(true);
-    pendingSsoAction.current = 'antigravity'; // ← đánh dấu nguồn
     try {
       if (!isTauri()) {
         showToast('Antigravity chỉ khả dụng ở chế độ Desktop', 'error');
         setAntigravityBusy(false);
         return;
       }
-      // Reuse VNPAY JWT listener - same auth flow
-      const port = await invoke<number>('prepare_vnpay_jwt_listener');
-      const authUrl = `https://genai.vnpay.vn/create-jwt-token?tool=ag&connectid=${encodeURIComponent(String(port))}`;
-      const { openUrl } = await import('@tauri-apps/plugin-opener');
-      await openUrl(authUrl);
-      showToast('Đang chờ JWT từ trình duyệt...', 'info');
+      const status = await invoke<{ running: boolean; pid: number | null }>(
+        'nine_router_mitm_start',
+        { apiKey: '', enableDns: true, sudoPassword: null }
+      );
+      setMitmRunning(status.running);
+      showToast(
+        status.pid
+          ? `Antigravity đã bật (PID ${status.pid}) - DNS redirect active`
+          : 'Antigravity đã bật - DNS redirect active',
+        'success'
+      );
     } catch (error) {
-      console.error('Antigravity auth failed:', error);
+      console.error('Antigravity start failed:', error);
       showToast(`Antigravity lỗi: ${error}`, 'error');
+    } finally {
       setAntigravityBusy(false);
     }
   };
@@ -331,6 +373,7 @@ function Accounts() {
 
     // Bootstrap CLI VNPAY status & best-effort OTel profile setup
     refreshCliVnpayStatus();
+    refreshMitmStatus();
     invoke<boolean>('ensure_otel_telemetry_env')
       .then((added) => {
         if (added) {
@@ -1017,18 +1060,23 @@ function Accounts() {
             </span>
           </button>
 
-          {/* Antigravity - Authenticate with VNPAY for Antigravity CLI */}
+          {/* Antigravity MITM Toggle - single button that changes color/text */}
           <button
             className={cn(
-              "px-2.5 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shadow-sm",
-              antigravityBusy && "opacity-70 cursor-not-allowed",
+              "px-2.5 py-2 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm",
+              mitmRunning
+                ? "bg-rose-600 hover:bg-rose-700"
+                : "bg-emerald-600 hover:bg-emerald-700",
+              (antigravityBusy || mitmBusy) && "opacity-70 cursor-not-allowed",
             )}
             onClick={handleAntigravityAuth}
-            disabled={antigravityBusy}
-            title="Antigravity"
+            disabled={antigravityBusy || mitmBusy}
+            title={mitmRunning ? "Gỡ Antigravity DNS" : "Bật Antigravity DNS"}
           >
-            <Rocket className={cn("w-3.5 h-3.5 shrink-0", antigravityBusy && "animate-pulse")} />
-            <span className="hidden lg:inline">Antigravity</span>
+            <Zap className={cn("w-3.5 h-3.5 shrink-0", (antigravityBusy || mitmBusy) && "animate-pulse")} />
+            <span className="hidden lg:inline">
+              {mitmRunning ? "Undo AG" : "Antigravity"}
+            </span>
           </button>
 
           <button

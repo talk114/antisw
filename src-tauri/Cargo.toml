@@ -59,6 +59,7 @@ pin-project = "1.1"                 # Pin 投影辅助
 bytes = "1.5"                       # SSE 字节操作
 tauri-plugin-single-instance = { version = "2.3.6", features = ["deep-link"] }
 libc = "0.2"
+rcgen = "0.13"
 tracing-appender = "0.2.4"
 tracing-log = "0.2.0"
 tauri-plugin-autostart = "2.5.1"
