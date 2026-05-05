@@ -26,14 +26,16 @@ const REDIRECT_DOMAINS: &[&str] = &[
     "cloudcode-pa.googleapis.com",
 ];
 
-/// Generate hosts file entries (both IPv4 and IPv6)
+/// Generate hosts file entries (IPv4 only - IPv6 disabled for compatibility)
 fn generate_hosts_entries(target_ip: &str) -> String {
-    let ipv6 = if target_ip == "127.0.0.1" { "::1" } else { target_ip };
     let mut entries = String::new();
     entries.push_str(&format!("{}\n", MARKER_START));
     for domain in REDIRECT_DOMAINS {
         entries.push_str(&format!("{} {}\n", target_ip, domain));
-        entries.push_str(&format!("{} {}\n", ipv6, domain));
+        // IPv6 entries disabled - causes issues with some apps (e.g. Tauri dev)
+        // if target_ip == "127.0.0.1" {
+        //     entries.push_str(&format!("::1 {}\n", domain));
+        // }
     }
     entries.push_str(&format!("{}\n", MARKER_END));
     entries

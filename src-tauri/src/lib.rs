@@ -577,6 +577,8 @@ pub fn run() {
             commands::nine_router_mitm::nine_router_mitm_start,
             commands::nine_router_mitm::nine_router_mitm_stop,
             commands::nine_router_mitm::nine_router_mitm_hosts_active,
+            commands::nine_router_mitm::nine_router_mitm_is_ca_cert_trusted,
+            commands::nine_router_mitm::nine_router_mitm_trust_ca_cert,
             // Debug console commands
             modules::log_bridge::enable_debug_console,
             modules::log_bridge::disable_debug_console,

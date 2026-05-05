@@ -1,6 +1,6 @@
 // 9Router MITM Process Manager for Antigravity (Google Cloud Code / Gemini API)
 //
-// Spawns 9router's Node.js MITM server (src/mitm/server.js) which:
+// Spawns 9router's Node.js MITM server (src/mitm/server.cjs) which:
 //  - Listens on port 443 locally with SSL termination
 //  - Intercepts Gemini API requests (cloudcode-pa.googleapis.com)
 //  - Forwards them to 9router at localhost:20128 for multi-provider routing
@@ -117,7 +117,7 @@ fn find_node() -> Option<PathBuf> {
 /// Search order:
 ///  1. `MITM_SERVER_PATH` env var (explicit override)
 ///  2. Dev build: path embedded at compile time via CARGO_MANIFEST_DIR
-///  3. Production: `<exe>/../mitm/server.js` bundled alongside executable
+///  3. Production: `<exe>/../mitm/server.cjs` bundled alongside executable
 pub fn resolve_server_path() -> Option<PathBuf> {
     // 1. Explicit override
     if let Ok(p) = std::env::var("MITM_SERVER_PATH") {
@@ -128,7 +128,7 @@ pub fn resolve_server_path() -> Option<PathBuf> {
     }
 
     // 2. Dev build: CARGO_MANIFEST_DIR is src-tauri/, mitm/ is sibling
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("mitm/server.js");
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("mitm/server.cjs");
     if dev_path.exists() {
         return Some(dev_path);
     }
@@ -136,7 +136,7 @@ pub fn resolve_server_path() -> Option<PathBuf> {
     // 3. Production bundle
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let prod_path = parent.join("mitm/server.js");
+            let prod_path = parent.join("mitm/server.cjs");
             if prod_path.exists() {
                 return Some(prod_path);
             }
@@ -165,7 +165,7 @@ impl NineRouterMitmManager {
         }
 
         let server_path = resolve_server_path()
-            .ok_or("MITM server.js not found. Set MITM_SERVER_PATH env var to point to src-tauri/mitm/server.js")?;
+            .ok_or("MITM server.cjs not found. Set MITM_SERVER_PATH env var to point to src-tauri/mitm/server.cjs")?;
 
         let node = find_node()
             .ok_or("node binary not found — install Node.js to use 9Router MITM")?;
