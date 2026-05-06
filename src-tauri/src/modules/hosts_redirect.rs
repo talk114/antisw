@@ -26,16 +26,26 @@ const REDIRECT_DOMAINS: &[&str] = &[
     "cloudcode-pa.googleapis.com",
 ];
 
+<<<<<<< Updated upstream
 /// Generate hosts file entries (IPv4 only - IPv6 disabled for compatibility)
+=======
+/// Generate hosts file entries (IPv4 + IPv6 block for force IPv4)
+>>>>>>> Stashed changes
 fn generate_hosts_entries(target_ip: &str) -> String {
     let mut entries = String::new();
     entries.push_str(&format!("{}\n", MARKER_START));
     for domain in REDIRECT_DOMAINS {
+        // IPv4 entry - actual target
         entries.push_str(&format!("{} {}\n", target_ip, domain));
+<<<<<<< Updated upstream
         // IPv6 entries disabled - causes issues with some apps (e.g. Tauri dev)
         // if target_ip == "127.0.0.1" {
         //     entries.push_str(&format!("::1 {}\n", domain));
         // }
+=======
+        // IPv6 entry - point to ::1 to block IPv6 and force IPv4 fallback
+        entries.push_str(&format!("::1 {}\n", domain));
+>>>>>>> Stashed changes
     }
     entries.push_str(&format!("{}\n", MARKER_END));
     entries
@@ -147,8 +157,7 @@ fn flush_dns_cache() {
 }
 
 /// Write hosts file with elevated privileges (cross-platform)
-/// If `password` is Some, pipe it to sudo via stdin (sudo -S).
-/// If None, falls back to interactive elevation (osascript on macOS).
+/// Requires password from frontend dialog - uses sudo -S to pipe it through stdin.
 fn write_hosts_with_privileges(new_content: &str, password: Option<&str>) -> Result<(), String> {
     // Write the new content to a temp file first
     let temp_dir = std::env::temp_dir();
@@ -174,120 +183,69 @@ fn write_hosts_with_privileges(new_content: &str, password: Option<&str>) -> Res
 }
 
 /// Platform-specific privilege elevation to copy temp file to hosts.
-/// If `password` is Some, use sudo -S to pipe it through stdin.
+/// Requires password from frontend dialog - uses sudo -S to pipe it through stdin.
 #[cfg(target_os = "macos")]
 fn elevate_and_copy(src: &str, dst: &str, password: Option<&str>) -> Result<(), String> {
-    // Prefer sudo -S with piped password (if password is available)
-    if let Some(pwd) = password {
-        tracing::info!("[VNPAY-HOSTS] Using sudo -S with piped password...");
-        // Use sudo -S: read password from stdin so no TTY prompt needed.
-        // We pipe the password via stdin using a heredoc through sh.
-        let status = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "printf '%s\\n' '{}' | sudo -S cp '{}' '{}'",
-                pwd.replace('\'', "'\\''"),
-                src.replace('\'', "'\\''"),
-                dst.replace('\'', "'\\''")
-            ))
-            .output()
-            .map_err(|e| format!("Failed to run sudo: {}", e))?;
+    // Password is required - collected from frontend dialog
+    let pwd = password.ok_or("Sudo password required. Please enter your computer password.")?;
 
-        if status.status.success() {
-            // Flush DNS cache
-            let _ = Command::new("dscacheutil").args(["-flushcache"]).output();
-            let _ = Command::new("killall")
-                .args(["-HUP", "mDNSResponder"])
-                .output();
-            tracing::info!("[VNPAY-HOSTS] Hosts file updated via sudo -S");
-            return Ok(());
-        }
+    tracing::info!("[VNPAY-HOSTS] Using sudo -S with piped password...");
 
-        let stderr = String::from_utf8_lossy(&status.stderr);
-        tracing::warn!("[VNPAY-HOSTS] sudo -S failed: {}", stderr);
-        // Fall through to osascript below
-    }
-
-    // Fallback: interactive osascript prompt (no password)
-    let script = format!(
-        "do shell script \"cp '{}' '{}' && chmod 644 '{}' && dscacheutil -flushcache && killall -HUP mDNSResponder\" with administrator privileges with prompt \"Antigravity needs to update /etc/hosts to redirect API traffic.\"",
-        src.replace('\'', "'\\''"),
-        dst.replace('\'', "'\\''"),
-        dst.replace('\'', "'\\''")
-    );
-
-    tracing::info!("[VNPAY-HOSTS] Requesting admin privileges via osascript (interactive)...");
-
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "printf '%s\\n' '{}' | sudo -S sh -c 'cp {} {} && chmod 644 {} && dscacheutil -flushcache && killall -HUP mDNSResponder'",
+            pwd.replace('\'', "'\\''"),
+            src.replace('\'', "'\\''"),
+            dst.replace('\'', "'\\''"),
+            dst.replace('\'', "'\\''")
+        ))
         .output()
-        .map_err(|e| format!("Failed to invoke osascript: {}", e))?;
+        .map_err(|e| format!("Failed to run sudo: {}", e))?;
 
-    if output.status.success() {
-        tracing::info!("[VNPAY-HOSTS] Hosts file updated with admin privileges");
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Admin authorization failed or denied: {}", stderr))
+    if status.status.success() {
+        tracing::info!("[VNPAY-HOSTS] Hosts file updated via sudo -S");
+        return Ok(());
     }
+
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    tracing::warn!("[VNPAY-HOSTS] sudo -S failed: {}", stderr);
+    Err(format!("Failed to update hosts file: {}", stderr))
 }
 
 #[cfg(target_os = "linux")]
 fn elevate_and_copy(src: &str, dst: &str, password: Option<&str>) -> Result<(), String> {
-    // Try sudo -S with piped password
-    if let Some(pwd) = password {
-        tracing::info!("[VNPAY-HOSTS] Using sudo -S with piped password...");
-        let status = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "printf '%s\\n' '{}' | sudo -S cp '{}' '{}'",
-                pwd.replace('\'', "'\\''"),
-                src.replace('\'', "'\\''"),
-                dst.replace('\'', "'\\''")
-            ))
-            .output()
-            .map_err(|e| format!("Failed to run sudo: {}", e))?;
+    // Password is required - collected from frontend dialog
+    let pwd = password.ok_or("Sudo password required. Please enter your computer password.")?;
 
-        if status.status.success() {
-            tracing::info!("[VNPAY-HOSTS] Hosts file updated via sudo -S");
-            return Ok(());
-        }
+    tracing::info!("[VNPAY-HOSTS] Using sudo -S with piped password...");
 
-        let stderr = String::from_utf8_lossy(&status.stderr);
-        tracing::warn!("[VNPAY-HOSTS] sudo -S failed: {}", stderr);
-        // Fall through to pkexec below
-    }
-
-    // Try pkexec first (graphical sudo prompt)
-    let pkexec_result = Command::new("pkexec").arg("cp").arg(src).arg(dst).output();
-
-    if let Ok(output) = pkexec_result {
-        if output.status.success() {
-            tracing::info!("[VNPAY-HOSTS] Hosts file updated via pkexec");
-            return Ok(());
-        }
-    }
-
-    // Fall back to sudo (terminal prompt)
-    let sudo_result = Command::new("sudo")
-        .arg("cp")
-        .arg(src)
-        .arg(dst)
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "printf '%s\\n' '{}' | sudo -S cp '{}' '{}'",
+            pwd.replace('\'', "'\\''"),
+            src.replace('\'', "'\\''"),
+            dst.replace('\'', "'\\''")
+        ))
         .output()
-        .map_err(|e| format!("Failed to invoke sudo: {}", e))?;
+        .map_err(|e| format!("Failed to run sudo: {}", e))?;
 
-    if sudo_result.status.success() {
-        tracing::info!("[VNPAY-HOSTS] Hosts file updated via sudo");
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&sudo_result.stderr);
-        Err(format!("sudo failed: {}", stderr))
+    if status.status.success() {
+        tracing::info!("[VNPAY-HOSTS] Hosts file updated via sudo -S");
+        return Ok(());
     }
+
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    tracing::warn!("[VNPAY-HOSTS] sudo -S failed: {}", stderr);
+    Err(format!("Failed to update hosts file: {}", stderr))
 }
 
 #[cfg(target_os = "windows")]
-fn elevate_and_copy(src: &str, dst: &str, _password: Option<&str>) -> Result<(), String> {
+fn elevate_and_copy(src: &str, dst: &str, password: Option<&str>) -> Result<(), String> {
+    // Password is required - collected from frontend dialog
+    let _pwd = password.ok_or("Admin password required. Please enter your computer password.")?;
+
     // Use PowerShell with Start-Process -Verb RunAs to trigger UAC prompt
     let ps_command = format!(
         "Start-Process -FilePath cmd.exe -ArgumentList '/c copy /Y \"{}\" \"{}\"' -Verb RunAs -Wait",
@@ -389,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_strip_existing_entries() {
-        let content = "127.0.0.1 localhost\n# ANTIGRAVITY-VNPAY-MITM-START\n127.0.0.1 example.com\n# ANTIGRAVITY-VNPAY-MITM-END\n::1 localhost\n";
+        let content = "127.0.0.1 localhost\n#ANTIGRAVITY-VNPAY-MITM-START\n127.0.0.1 example.com\n#ANTIGRAVITY-VNPAY-MITM-END\n::1 localhost\n";
         let stripped = strip_existing_entries(content);
         assert!(stripped.contains("127.0.0.1 localhost"));
         assert!(stripped.contains("::1 localhost"));

@@ -1,5 +1,6 @@
-// 9Router MITM Process Manager for Antigravity (Google Cloud Code / Gemini API)
+// 9Router DNS Redirect Manager for Antigravity (Google Cloud Code / Gemini API)
 //
+<<<<<<< Updated upstream
 // Spawns 9router's Node.js MITM server (src/mitm/server.cjs) which:
 //  - Listens on port 443 locally with SSL termination
 //  - Intercepts Gemini API requests (cloudcode-pa.googleapis.com)
@@ -11,22 +12,20 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+=======
+// Manages DNS redirect via /etc/hosts to point Google domains to the real server IP.
+// No MITM proxy - requests go directly to the target server with proper SSL certificates.
+>>>>>>> Stashed changes
 
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
+/// Target server IP for DNS redirect
+pub const DEFAULT_TARGET_IP: &str = "103.67.184.135";
 
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-const DEFAULT_ROUTER_BASE: &str = "http://localhost:20128";
-
-// Antigravity domains intercepted by the MITM server
-pub const ANTIGRAVITY_MITM_HOSTS: &[&str] = &[
+/// Antigravity domains to redirect via hosts file
+pub const ANTIGRAVITY_HOSTS: &[&str] = &[
     "daily-cloudcode-pa.googleapis.com",
     "cloudcode-pa.googleapis.com",
 ];
@@ -34,41 +33,37 @@ pub const ANTIGRAVITY_MITM_HOSTS: &[&str] = &[
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NineRouterMitmStatus {
     pub running: bool,
-    pub pid: Option<u32>,
-    pub server_path: Option<String>,
-    pub router_base: String,
-}
-
-struct MitmState {
-    process: Option<Child>,
-    pid: Option<u32>,
-    server_path: Option<PathBuf>,
+    pub target_ip: String,
+    pub domains: Vec<String>,
 }
 
 pub struct NineRouterMitmManager {
-    state: Arc<RwLock<MitmState>>,
-    router_base: String,
+    state: Arc<RwLock<ManagerState>>,
+}
+
+struct ManagerState {
+    active: bool,
+    target_ip: String,
 }
 
 impl NineRouterMitmManager {
-    pub fn new(router_base: impl Into<String>) -> Self {
+    pub fn new(target_ip: impl Into<String>) -> Self {
         Self {
-            state: Arc::new(RwLock::new(MitmState {
-                process: None,
-                pid: None,
-                server_path: None,
+            state: Arc::new(RwLock::new(ManagerState {
+                active: false,
+                target_ip: target_ip.into(),
             })),
-            router_base: router_base.into(),
         }
     }
 }
 
 impl Default for NineRouterMitmManager {
     fn default() -> Self {
-        Self::new(DEFAULT_ROUTER_BASE)
+        Self::new(DEFAULT_TARGET_IP)
     }
 }
 
+<<<<<<< Updated upstream
 /// Find the node binary on the system PATH.
 fn find_node() -> Option<PathBuf> {
     if cfg!(target_os = "windows") {
@@ -146,13 +141,13 @@ pub fn resolve_server_path() -> Option<PathBuf> {
     None
 }
 
+=======
+>>>>>>> Stashed changes
 impl NineRouterMitmManager {
-    /// Start the 9router MITM server process.
-    ///
-    /// Returns the PID of the spawned process on success.
-    /// Callers are responsible for setting up DNS redirect via `hosts_redirect`.
-    pub async fn start(&self, api_key: &str) -> Result<u32, String> {
+    /// Mark the DNS redirect as active
+    pub async fn set_active(&self, active: bool) {
         let mut state = self.state.write().await;
+<<<<<<< Updated upstream
 
         // Already running?
         if let Some(pid) = state.pid {
@@ -221,83 +216,32 @@ impl NineRouterMitmManager {
 
         tracing::info!("[9ROUTER-MITM] Started with PID {}", pid);
         Ok(pid)
+=======
+        state.active = active;
+>>>>>>> Stashed changes
     }
 
-    /// Stop the 9router MITM server process.
-    pub async fn stop(&self) -> Result<(), String> {
-        let mut state = self.state.write().await;
-
-        let pid = match state.pid {
-            Some(p) => p,
-            None => {
-                tracing::info!("[9ROUTER-MITM] Not running, nothing to stop");
-                return Ok(());
-            }
-        };
-
-        if let Some(mut child) = state.process.take() {
-            let _ = child.kill().await;
-        }
-
-        // Best-effort SIGKILL by PID if still alive
-        if is_pid_alive(pid) {
-            kill_pid(pid);
-        }
-
-        state.pid = None;
-        state.server_path = None;
-        tracing::info!("[9ROUTER-MITM] Stopped");
-        Ok(())
+    /// Check if DNS redirect is active
+    pub async fn is_active(&self) -> bool {
+        let state = self.state.read().await;
+        state.active
     }
 
-    /// Get current status of the MITM manager.
+    /// Get current status
     pub async fn get_status(&self) -> NineRouterMitmStatus {
         let state = self.state.read().await;
-        let alive = state.pid.map(is_pid_alive).unwrap_or(false);
+        let active = crate::modules::hosts_redirect::has_hosts_entries();
         NineRouterMitmStatus {
-            running: alive,
-            pid: if alive { state.pid } else { None },
-            server_path: state.server_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
-            router_base: self.router_base.clone(),
+            running: active,
+            target_ip: state.target_ip.clone(),
+            domains: ANTIGRAVITY_HOSTS.iter().map(|s| s.to_string()).collect(),
         }
     }
 
-    /// Return true when the MITM server process is alive.
-    pub async fn is_running(&self) -> bool {
+    /// Get the target IP
+    pub async fn get_target_ip(&self) -> String {
         let state = self.state.read().await;
-        state.pid.map(is_pid_alive).unwrap_or(false)
-    }
-}
-
-// ── Platform helpers ──────────────────────────────────────────────────────────
-
-fn is_pid_alive(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        // kill -0 checks process existence without sending a signal
-        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
-    }
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {}", pid), "/NH"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
-            .unwrap_or(false)
-    }
-}
-
-fn kill_pid(pid: u32) {
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(pid as libc::pid_t, libc::SIGKILL);
-    }
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/PID", &pid.to_string()])
-            .output();
+        state.target_ip.clone()
     }
 }
 
@@ -306,14 +250,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_router_base() {
+    fn test_default_target_ip() {
         let mgr = NineRouterMitmManager::default();
-        assert_eq!(mgr.router_base, DEFAULT_ROUTER_BASE);
-    }
-
-    #[test]
-    fn test_resolve_server_path_does_not_panic() {
-        // Just ensure it doesn't panic; path may or may not exist in CI
-        let _ = resolve_server_path();
+        assert_eq!(mgr.state.try_read().unwrap().target_ip, DEFAULT_TARGET_IP);
     }
 }
