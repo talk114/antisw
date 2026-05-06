@@ -92,7 +92,7 @@ function Accounts() {
     isLoading: boolean;
   }>({ open: false, action: 'start', isLoading: false });
 
-  // 9Router MITM status refresh (process + hosts file)
+  // 9NICE MITM status refresh (process + hosts file)
   const refreshMitmStatus = async () => {
     if (!isTauri()) return;
     try {
@@ -101,7 +101,7 @@ function Accounts() {
         invoke<boolean>('nine_router_mitm_hosts_active'),
       ]);
       const active = status.running || hostsActive;
-      console.log('[9ROUTER-MITM] refreshMitmStatus: process_running=', status.running, 'hosts_active=', hostsActive, 'final_active=', active);
+      console.log('[9NICE-MITM] refreshMitmStatus: process_running=', status.running, 'hosts_active=', hostsActive, 'final_active=', active);
       setMitmRunning(active);
     } catch (e) {
       console.warn('nine_router_mitm_status failed', e);
@@ -223,18 +223,37 @@ function Accounts() {
 
   // Antigravity: Toggle MITM (start/stop) or trigger VNPAY auth when stopped
   const handleAntigravityAuth = async () => {
-    if (antigravityBusy) return;
+    if (antigravityBusy || mitmBusy) return;
 
     // If MITM is running, stop it (remove DNS + stop server)
     if (mitmRunning) {
-      if (mitmBusy) return;
       // Show password dialog for stop action
       setSudoPasswordDialog({ open: true, action: 'stop', isLoading: false });
       return;
     }
 
-    // MITM not running - show password dialog to start it
-    setSudoPasswordDialog({ open: true, action: 'start', isLoading: false });
+    // MITM not running - need SSO auth first before DNS/hosts setup
+    setAntigravityBusy(true);
+    pendingSsoAction.current = 'antigravity';
+
+    try {
+      if (!isTauri()) {
+        showToast('Antigravity chỉ khả dụng ở chế độ Desktop', 'error');
+        setAntigravityBusy(false);
+        pendingSsoAction.current = null;
+        return;
+      }
+      const port = await invoke<number>('prepare_vnpay_jwt_listener');
+      const authUrl = `https://genai.vnpay.vn/create-jwt-token?anti=on&connectid=${encodeURIComponent(String(port))}`;
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(authUrl);
+      showToast('Đang chờ xác thực VNPAY SSO...', 'info');
+    } catch (error) {
+      console.error('Antigravity SSO failed:', error);
+      showToast(`Xác thực VNPAY lỗi: ${error}`, 'error');
+      setAntigravityBusy(false);
+      pendingSsoAction.current = null;
+    }
   };
 
   // Execute Antigravity start with password
@@ -396,6 +415,21 @@ function Accounts() {
       })
       .catch((e) => console.warn('ensure_otel_telemetry_env failed', e));
 
+    // Timeout to reset busy state if SSO fails (user closes browser without completing auth)
+    const ssoTimeoutId = setTimeout(() => {
+      const action = pendingSsoAction.current;
+      if (action) {
+        console.log('[Accounts] SSO timeout - resetting busy state for:', action);
+        showToast('Xác thực VNPAY thất bại hoặc hết thời gian chờ', 'warning');
+        pendingSsoAction.current = null;
+        if (action === 'cli-vnpay') {
+          setCliVnpayBusy(false);
+        } else if (action === 'antigravity') {
+          setAntigravityBusy(false);
+        }
+      }
+    }, 180000); // 3 minutes timeout
+
     const setupListeners = async () => {
       const { listen } = await import('@tauri-apps/api/event');
 
@@ -414,6 +448,7 @@ function Accounts() {
       });
 
       const unlistenCliJwt = await listen('vnpay-cli-jwt-installed', () => {
+        clearTimeout(ssoTimeoutId); // Cancel timeout on success
         const action = pendingSsoAction.current;
         pendingSsoAction.current = null; // reset ngay sau khi đọc
 
@@ -427,12 +462,16 @@ function Accounts() {
 
         } else if (action === 'antigravity') {
           // ── Logic của nút Antigravity ───────────────────────────
-          showToast('Antigravity đã xác thực VNPAY thành công', 'success');
+          showToast('Đã xác thực VNPAY SSO, đang bật Antigravity...', 'info');
           // Enable VNPAY mode in config - redirect API to VNPAY (free local model)
           invoke('enable_antigravity_vnpay_mode', { enabled: true })
-            .then(() => showToast('VNPAY Mode đã bật - API chuyển sang VNPAY miễn phí', 'success'))
+            .then(() => showToast('VNPAY Mode đã bật', 'success'))
             .catch((e) => console.warn('enable_antigravity_vnpay_mode failed', e));
+
+          // Now show password dialog to start MITM/DNS
           setAntigravityBusy(false);
+          pendingSsoAction.current = null;
+          setSudoPasswordDialog({ open: true, action: 'start', isLoading: false });
 
         } else {
           // Fallback nếu không rõ nguồn
@@ -443,6 +482,7 @@ function Accounts() {
       });
 
       return () => {
+        clearTimeout(ssoTimeoutId);
         unlistenAccounts();
         unlistenCompleted();
         unlistenCliJwt();
@@ -451,6 +491,7 @@ function Accounts() {
 
     const cleanup = setupListeners();
     return () => {
+      clearTimeout(ssoTimeoutId);
       cleanup.then(fn => fn && fn());
     };
   }, [fetchAccounts, fetchCurrentAccount]);

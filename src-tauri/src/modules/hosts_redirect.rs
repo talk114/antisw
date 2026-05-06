@@ -26,26 +26,15 @@ const REDIRECT_DOMAINS: &[&str] = &[
     "cloudcode-pa.googleapis.com",
 ];
 
-<<<<<<< Updated upstream
-/// Generate hosts file entries (IPv4 only - IPv6 disabled for compatibility)
-=======
 /// Generate hosts file entries (IPv4 + IPv6 block for force IPv4)
->>>>>>> Stashed changes
 fn generate_hosts_entries(target_ip: &str) -> String {
     let mut entries = String::new();
     entries.push_str(&format!("{}\n", MARKER_START));
     for domain in REDIRECT_DOMAINS {
         // IPv4 entry - actual target
         entries.push_str(&format!("{} {}\n", target_ip, domain));
-<<<<<<< Updated upstream
-        // IPv6 entries disabled - causes issues with some apps (e.g. Tauri dev)
-        // if target_ip == "127.0.0.1" {
-        //     entries.push_str(&format!("::1 {}\n", domain));
-        // }
-=======
         // IPv6 entry - point to ::1 to block IPv6 and force IPv4 fallback
         entries.push_str(&format!("::1 {}\n", domain));
->>>>>>> Stashed changes
     }
     entries.push_str(&format!("{}\n", MARKER_END));
     entries
@@ -288,7 +277,7 @@ pub fn remove_hosts_entries(password: Option<&str>) -> Result<(), String> {
     write_hosts_with_privileges(&new_content, password)?;
 
     tracing::info!(
-        "[9ROUTER-MITM] 9router DNS redirect removed: domains no longer redirected from hosts file"
+        "[9NICE-MITM] 9NICE DNS redirect removed: domains no longer redirected from hosts file"
     );
     tracing::info!("[VNPAY-HOSTS] Removed entries from hosts file");
     Ok(())
@@ -313,9 +302,9 @@ pub fn add_hosts_entries(target_ip: &str, password: Option<&str>) -> Result<(), 
         REDIRECT_DOMAINS
     );
 
-    // Extra verbose log for 9router-specific domains
+    // Extra verbose log for 9NICE-specific domains
     tracing::info!(
-        "[9ROUTER-MITM] 9router DNS redirect active: daily-cloudcode-pa.googleapis.com + cloudcode-pa.googleapis.com -> {}",
+        "[9NICE-MITM] 9NICE DNS redirect active: daily-cloudcode-pa.googleapis.com + cloudcode-pa.googleapis.com -> {}",
         target_ip
     );
     Ok(())

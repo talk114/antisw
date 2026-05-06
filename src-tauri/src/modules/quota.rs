@@ -55,7 +55,7 @@ struct Tier {
 }
 
 // ── DNS bypass via DNS-over-HTTPS ─────────────────────────────────────────────
-// Mirrors 9router server.js:
+// Mirrors 9NICE server.js:
 //   const resolver = new dns.Resolver();
 //   resolver.setServers(["8.8.8.8"]);
 //   const ip = await resolve4(hostname);   // real IP, ignores /etc/hosts

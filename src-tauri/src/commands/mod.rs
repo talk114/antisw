@@ -17,7 +17,7 @@ pub mod proxy_pool;
 pub mod tracking;
 // 导出 user_token 命令
 pub mod user_token;
-// 导出 9router MITM 命令
+// 导出 9NICE MITM 命令
 pub mod nine_router_mitm;
 
 /// 列出所有账号

@@ -4,7 +4,7 @@ cask "antigravity-sw" do
   version "4.1.12"
 =======
 cask "antigravity-tools" do
-  version "4.1.29"
+  version "5.0.0"
   sha256 :no_check
 
   name "Antigravity Switcher"

@@ -571,17 +571,12 @@ pub fn run() {
             commands::cloudflared::cloudflared_start,
             commands::cloudflared::cloudflared_stop,
             commands::cloudflared::cloudflared_get_status,
-            // 9Router MITM commands (antigravity)
+            // 9NICE MITM commands (antigravity)
             commands::nine_router_mitm::nine_router_mitm_status,
             commands::nine_router_mitm::nine_router_mitm_start,
             commands::nine_router_mitm::nine_router_mitm_stop,
             commands::nine_router_mitm::nine_router_mitm_hosts_active,
-<<<<<<< Updated upstream
-            commands::nine_router_mitm::nine_router_mitm_is_ca_cert_trusted,
-            commands::nine_router_mitm::nine_router_mitm_trust_ca_cert,
-=======
             commands::nine_router_mitm::nine_router_mitm_cert_installed,
->>>>>>> Stashed changes
             // Debug console commands
             modules::log_bridge::enable_debug_console,
             modules::log_bridge::disable_debug_console,

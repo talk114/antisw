@@ -2,6 +2,7 @@ use crate::modules::oauth;
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::Engine;
+use reqwest;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Mutex, OnceLock};
@@ -1111,6 +1112,15 @@ pub async fn prepare_vnpay_jwt_listener(
 
     let (cancel_tx, cancel_rx) = watch::channel(false);
 
+    // Add 3-minute timeout for the listener
+    let (timeout_tx, timeout_rx) = watch::channel(false);
+    let cancel_tx_clone = cancel_tx.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(180)).await;
+        crate::modules::logger::log_warn("VNPAY JWT listener timeout - no callback received after 3 minutes");
+        let _ = cancel_tx_clone.send(true);
+    });
+
     async fn handle_request(
         mut stream: tokio::net::TcpStream,
         app_handle: Option<tauri::AppHandle>,
@@ -1139,6 +1149,52 @@ pub async fn prepare_vnpay_jwt_listener(
             let _ = stream.write_all(resp.as_bytes()).await;
             let _ = stream.flush().await;
             return false;
+        }
+
+        // Verify token with gravityland.vnoffice.io.vn
+        let client = reqwest::Client::new();
+        match client
+            .get("http://gravityland.vnoffice.io.vn/verify/me")
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .map_err(|e| format!("verify_request_failed: {}", e))
+        {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    crate::modules::logger::log_error(&format!(
+                        "verify/me failed: {} - {}",
+                        status, body
+                    ));
+                    let resp_text = format!(
+                        "HTTP/1.1 401 Unauthorized\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                        <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                        <h1 style='color: red;'>&#x274C; Xác thực thất bại</h1>\
+                        <p>Token không hợp lệ hoặc đã hết hạn.</p></body></html>"
+                    );
+                    let _ = stream.write_all(resp_text.as_bytes()).await;
+                    let _ = stream.flush().await;
+                    return false;
+                }
+            }
+            Err(e) => {
+                crate::modules::logger::log_error(&format!(
+                    "verify/me request error: {}",
+                    e
+                ));
+                let resp_text = format!(
+                    "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                    <html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                    <h1 style='color: red;'>&#x274C; Lỗi xác thực</h1>\
+                    <p>Không thể kết nối đến máy chủ xác thực: {}</p></body></html>",
+                    e
+                );
+                let _ = stream.write_all(resp_text.as_bytes()).await;
+                let _ = stream.flush().await;
+                return false;
+            }
         }
 
         match crate::modules::claude_settings::apply_vnpay_jwt(&token) {

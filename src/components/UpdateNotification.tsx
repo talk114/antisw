@@ -127,7 +127,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
   return (
     <div
       className={`
-        fixed top-6 right-6 z-[100]
+        fixed top-6 left-1/2 -translate-x-1/2 z-[100]
         transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]
         ${isVisible && !isClosing ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'}
       `}
@@ -166,10 +166,10 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               <div>
                 <h3 className="font-bold text-gray-800 dark:text-white leading-tight">
                   {updateState === 'ready'
-                    ? t('update_notification.ready')
+                    ? "Update Ready!"
                     : isForceUpdate
-                      ? t('update_notification.force_update_title')
-                      : t('update_notification.title')}
+                      ? "Force update"
+                      : "Update now"}
                 </h3>
                 {updateInfo && (
                   <div className="flex flex-col">
@@ -207,11 +207,8 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
               {updateState === 'downloading' && t('update_notification.downloading')}
               {updateState === 'ready' && t('update_notification.restarting')}
-              {updateState === 'force' && updateInfo && t('update_notification.force_update_message', {
-                current: updateInfo.current_version,
-                min: updateInfo.min_version
-              })}
-              {updateState === 'available' && updateInfo && t('update_notification.message', { current: updateInfo.current_version })}
+              {updateState === 'force' && updateInfo && "A new version is available(from " + updateInfo.current_version + "). Please update the app to continue using it."}
+              {updateState === 'available' && updateInfo && ("A mandatory update is required. Please update the application to proceed from " + updateInfo.current_version)}
             </p>
           </div>
 
@@ -237,18 +234,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
                 <span>{isForceUpdate ? t('update_notification.force_update_button') : t('update_notification.auto_update')}</span>
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all duration-300" />
                 <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent z-20 pointer-events-none" />
-              </button>
-              <button
-                onClick={handleClose}
-                className="
-                  px-3 py-2.5 rounded-xl
-                  text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200
-                  hover:bg-black/5 dark:hover:bg-white/10
-                  transition-all duration-200
-                  text-sm font-medium
-                "
-              >
-                {t('update_notification.btn_later')}
               </button>
             </div>
           )}

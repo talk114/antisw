@@ -122,17 +122,4 @@ docker build --build-arg USE_MIRROR=true -t antigravity-manager:latest -f docker
 *   **API Base**: [http://localhost:8045/v1](http://localhost:8045/v1)
 
 ## 📦 Docker Hub 分發 (推薦)
-若要推送至你的倉庫：
-```bash
-# 打上版本標籤並推送
-<<<<<<< HEAD
-docker tag antigravity-manager:latest talk114/antisw:latest
-docker tag antigravity-manager:latest talk114/antisw:4.1.1
-docker push talk114/antisw:latest
-docker push talk114/antisw:4.1.1
-=======
-docker tag antigravity-manager:latest lbjlaq/antigravity-manager:latest
-docker tag antigravity-manager:latest lbjlaq/antigravity-manager:4.1.20
-docker push lbjlaq/antigravity-manager:latest
-docker push lbjlaq/antigravity-manager:4.1.20
-```
+
