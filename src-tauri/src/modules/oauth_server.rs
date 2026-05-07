@@ -128,6 +128,7 @@ struct VnpayJwtState {
     #[allow(dead_code)]
     port: u16,
     cancel_tx: watch::Sender<bool>,
+    action: String,
 }
 
 static OAUTH_FLOW_STATE: OnceLock<Mutex<Option<OAuthFlowState>>> = OnceLock::new();
@@ -1057,8 +1058,10 @@ pub fn cancel_vnpay_sso_listener() {
 /// Listens on `/sso-callback?token=<JWT>`, writes token to ~/.claude/settings.json,
 /// then emits "vnpay-cli-jwt-installed" event.
 /// Returns the port number (used as `connectid` in https://genai.vnpay.vn/create-jwt-token).
+/// `action` can be "cli-vnpay" or "antigravity" to track which flow triggered this.
 pub async fn prepare_vnpay_jwt_listener(
     app_handle: Option<tauri::AppHandle>,
+    action: String,
 ) -> Result<u16, String> {
     if let Ok(mut state) = get_vnpay_jwt_state().lock() {
         if let Some(s) = state.take() {
@@ -1121,9 +1124,14 @@ pub async fn prepare_vnpay_jwt_listener(
         let _ = cancel_tx_clone.send(true);
     });
 
+    // Capture action from outer scope for use in handle_request
+    let is_antigravity = action == "antigravity";
+    crate::modules::logger::log_info(&format!("VNPAY JWT listener action: {}, is_antigravity: {}", action, is_antigravity));
+
     async fn handle_request(
         mut stream: tokio::net::TcpStream,
         app_handle: Option<tauri::AppHandle>,
+        is_antigravity: bool,
     ) -> bool {
         let mut buffer = [0u8; 8192];
         let bytes_read = stream.read(&mut buffer).await.unwrap_or(0);
@@ -1197,53 +1205,111 @@ pub async fn prepare_vnpay_jwt_listener(
             }
         }
 
-        match crate::modules::claude_settings::apply_vnpay_jwt(&token) {
-            Ok(()) => {
-                // Best-effort OTel telemetry profile setup
-                let otel_added =
-                    crate::modules::claude_settings::ensure_otel_telemetry().unwrap_or(false);
+        if is_antigravity {
+            // Antigravity mode: Don't write to settings.json
+            crate::modules::logger::log_info("VNPAY JWT received for Antigravity mode (no settings.json write)");
 
-                let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
-                    <html><head><meta charset='utf-8'></head>\
-                    <body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                    <h1 style='color: green;'>&#x2705; CLI VNPAY đã sẵn sàng!</h1>\
-                    <script>setTimeout(function(){ window.close(); }, 800);</script>\
-                    </body></html>";
-                let _ = stream.write_all(resp.as_bytes()).await;
-                let _ = stream.flush().await;
+            let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                <html><head><meta charset='utf-8'></head>\
+                <body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                <h1 style='color: green;'>&#x2705; Xác thực Antigravity thành công!</h1>\
+                <script>setTimeout(function(){ window.close(); }, 800);</script>\
+                </body></html>";
+            let _ = stream.write_all(resp.as_bytes()).await;
+            let _ = stream.flush().await;
 
-                if let Some(h) = app_handle {
-                    use tauri::Emitter;
-                    #[derive(serde::Serialize, Clone)]
-                    struct Payload {
-                        otel_added: bool,
+            if let Some(h) = app_handle {
+                use tauri::Emitter;
+                use tauri::Manager;
+
+                // Bring window to front
+                if let Some(window) = h.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = window.set_always_on_top(true);
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        let _ = window.set_always_on_top(false);
                     }
-                    let _ = h.emit(
-                        "vnpay-cli-jwt-installed",
-                        Payload { otel_added },
-                    );
                 }
-                true
+
+                #[derive(serde::Serialize, Clone)]
+                struct Payload {
+                    action: String,
+                }
+                let _ = h.emit(
+                    "vnpay-cli-jwt-installed",
+                    Payload { action: "antigravity".to_string() },
+                );
             }
-            Err(e) => {
-                crate::modules::logger::log_error(&format!(
-                    "Failed to apply VNPAY JWT to settings: {}",
-                    e
-                ));
-                let body = format!(
-                    "<html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
-                    <h1 style='color: red;'>&#x274C; Ghi cấu hình thất bại</h1>\
-                    <p>{}</p></body></html>",
-                    e
-                );
-                let resp = format!(
-                    "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = stream.write_all(resp.as_bytes()).await;
-                let _ = stream.flush().await;
-                false
+            true
+        } else {
+            // CLI VNPAY mode: Write JWT to settings.json
+            match crate::modules::claude_settings::apply_vnpay_jwt(&token) {
+                Ok(()) => {
+                    // Best-effort OTel telemetry profile setup
+                    let otel_added =
+                        crate::modules::claude_settings::ensure_otel_telemetry().unwrap_or(false);
+
+                    let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                        <html><head><meta charset='utf-8'></head>\
+                        <body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                        <h1 style='color: green;'>&#x2705; CLI VNPAY đã sẵn sàng!</h1>\
+                        <script>setTimeout(function(){ window.close(); }, 800);</script>\
+                        </body></html>";
+                    let _ = stream.write_all(resp.as_bytes()).await;
+                    let _ = stream.flush().await;
+
+                    if let Some(h) = app_handle {
+                        use tauri::Emitter;
+                        use tauri::Manager;
+
+                        // Bring window to front
+                        if let Some(window) = h.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+
+                            #[cfg(target_os = "macos")]
+                            {
+                                let _ = window.set_always_on_top(true);
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                let _ = window.set_always_on_top(false);
+                            }
+                        }
+
+                        #[derive(serde::Serialize, Clone)]
+                        struct Payload {
+                            action: String,
+                        }
+                        let _ = h.emit(
+                            "vnpay-cli-jwt-installed",
+                            Payload { action: "cli-vnpay".to_string() },
+                        );
+                    }
+                    true
+                }
+                Err(e) => {
+                    crate::modules::logger::log_error(&format!(
+                        "Failed to apply VNPAY JWT to settings: {}",
+                        e
+                    ));
+                    let body = format!(
+                        "<html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>\
+                        <h1 style='color: red;'>&#x274C; Ghi cấu hình thất bại</h1>\
+                        <p>{}</p></body></html>",
+                        e
+                    );
+                    let resp = format!(
+                        "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(resp.as_bytes()).await;
+                    let _ = stream.flush().await;
+                    false
+                }
             }
         }
     }
@@ -1251,6 +1317,7 @@ pub async fn prepare_vnpay_jwt_listener(
     if let Some(l4) = ipv4_listener {
         let mut rx = cancel_rx.clone();
         let app_handle = app_handle.clone();
+        let is_antigravity = is_antigravity;
         tokio::spawn(async move {
             loop {
                 let accept_result = tokio::select! {
@@ -1259,7 +1326,7 @@ pub async fn prepare_vnpay_jwt_listener(
                 };
                 if let Ok((stream, _)) = accept_result {
                     let app_handle = app_handle.clone();
-                    let done = handle_request(stream, app_handle).await;
+                    let done = handle_request(stream, app_handle, is_antigravity).await;
                     if done {
                         break;
                     }
@@ -1271,6 +1338,7 @@ pub async fn prepare_vnpay_jwt_listener(
     if let Some(l6) = ipv6_listener {
         let mut rx = cancel_rx.clone();
         let app_handle = app_handle.clone();
+        let is_antigravity = is_antigravity;
         tokio::spawn(async move {
             loop {
                 let accept_result = tokio::select! {
@@ -1279,7 +1347,7 @@ pub async fn prepare_vnpay_jwt_listener(
                 };
                 if let Ok((stream, _)) = accept_result {
                     let app_handle = app_handle.clone();
-                    let done = handle_request(stream, app_handle).await;
+                    let done = handle_request(stream, app_handle, is_antigravity).await;
                     if done {
                         break;
                     }
@@ -1289,7 +1357,7 @@ pub async fn prepare_vnpay_jwt_listener(
     }
 
     if let Ok(mut state) = get_vnpay_jwt_state().lock() {
-        *state = Some(VnpayJwtState { port, cancel_tx });
+        *state = Some(VnpayJwtState { port, cancel_tx, action });
     }
 
     crate::modules::logger::log_info(&format!("VNPAY JWT listener started on port {}", port));

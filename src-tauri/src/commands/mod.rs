@@ -481,10 +481,14 @@ pub async fn cancel_vnpay_sso_listener() -> Result<(), String> {
 }
 
 /// Prepare VNPAY JWT (CLI VNPAY) listener and return its port (used as `connectid`).
+/// `action` can be "cli-vnpay" or "antigravity" to track which flow triggered this.
 #[tauri::command]
-pub async fn prepare_vnpay_jwt_listener(app_handle: tauri::AppHandle) -> Result<u16, String> {
-    modules::logger::log_info("Preparing VNPAY JWT listener");
-    modules::oauth_server::prepare_vnpay_jwt_listener(Some(app_handle)).await
+pub async fn prepare_vnpay_jwt_listener(
+    app_handle: tauri::AppHandle,
+    action: String,
+) -> Result<u16, String> {
+    modules::logger::log_info(&format!("Preparing VNPAY JWT listener for action: {}", action));
+    modules::oauth_server::prepare_vnpay_jwt_listener(Some(app_handle), action).await
 }
 
 /// Cancel VNPAY JWT listener
@@ -768,10 +772,18 @@ pub async fn write_claude_settings(auth_token: String, base_url: String) -> Resu
     Ok(())
 }
 
-/// 显示主窗口
+/// 显示主窗口并将其提升到最前面
 #[tauri::command]
-pub async fn show_main_window(window: tauri::Window) -> Result<(), String> {
-    window.show().map_err(|e| e.to_string())
+pub async fn show_main_window(app_handle: tauri::AppHandle, window: tauri::Window) -> Result<(), String> {
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Manager;
+        app_handle.set_activation_policy(tauri::ActivationPolicy::Regular).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// 设置窗口主题（用于同步 Windows 标题栏按钮颜色）

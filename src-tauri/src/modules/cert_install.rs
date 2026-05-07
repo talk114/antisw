@@ -100,6 +100,7 @@ pub fn install_cert_to_ca(cert_path: &Path, password: Option<&str>) -> Result<()
 }
 
 /// Install certificate on Windows (into Root store)
+/// Tries LocalMachine\Root first (requires admin), falls back to CurrentUser\Root (user-level)
 #[cfg(target_os = "windows")]
 pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Result<(), String> {
     if !cert_path.exists() {
@@ -108,7 +109,7 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
 
     let cert_str = cert_path.to_string_lossy().to_string();
 
-    // Use PowerShell to add cert to Root store (Trusted Root Certification Authorities)
+    // First try LocalMachine\Root (requires admin privileges)
     let ps_command = format!(
         "Import-Certificate -FilePath '{}' -CertStoreLocation Cert:\\LocalMachine\\Root -Confirm:$false",
         cert_str.replace('\'', "''")
@@ -120,7 +121,31 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
 
     match output {
         Ok(out) if out.status.success() => {
-            tracing::info!("[CERT] Certificate installed to Windows Root store");
+            tracing::info!("[CERT] Certificate installed to Windows LocalMachine\\Root (admin)");
+            return Ok(());
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::warn!("[CERT] LocalMachine\\Root install failed (admin required): {}", stderr);
+        }
+        Err(e) => {
+            tracing::warn!("[CERT] LocalMachine\\Root install failed: {}", e);
+        }
+    }
+
+    // Fall back to CurrentUser\Root (no admin required, user-level trust)
+    let ps_command = format!(
+        "Import-Certificate -FilePath '{}' -CertStoreLocation Cert:\\CurrentUser\\Root -Confirm:$false",
+        cert_str.replace('\'', "''")
+    );
+
+    let output = Command::new("powershell")
+        .args(&["-NoProfile", "-Command", &ps_command])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            tracing::info!("[CERT] Certificate installed to Windows CurrentUser\\Root (user-level)");
             Ok(())
         }
         Ok(out) => {
@@ -181,14 +206,17 @@ pub fn is_cert_installed() -> bool {
 
     #[cfg(target_os = "windows")]
     {
-        // Check if cert with common name exists in Root store
+        // Check if cert exists in either LocalMachine\Root or CurrentUser\Root
         let output = Command::new("powershell")
-            .args(&["-NoProfile", "-Command", "Get-ChildItem -Path Cert:\\LocalMachine\\Root | Where-Object { $_.Subject -like '*googleapis*' }"])
+            .args(&["-NoProfile", "-Command", "(Get-ChildItem -Path Cert:\\LocalMachine\\Root | Where-Object { $_.Subject -like '*googleapis*' } | Measure-Object).Count -gt 0 -or (Get-ChildItem -Path Cert:\\CurrentUser\\Root | Where-Object { $_.Subject -like '*googleapis*' } | Measure-Object).Count -gt 0"])
             .output();
 
         match output {
-            Ok(out) => out.status.success() && !String::from_utf8_lossy(&out.stdout).trim().is_empty(),
-            Err(_) => false,
+            Ok(out) if out.status.success() => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                stdout.trim().eq_ignore_ascii_case("True")
+            }
+            _ => false,
         }
     }
 

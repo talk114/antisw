@@ -194,7 +194,7 @@ function Accounts() {
         showToast('CLI VNPAY chỉ khả dụng ở chế độ Desktop', 'error');
         return;
       }
-      const port = await invoke<number>('prepare_vnpay_jwt_listener');
+      const port = await invoke<number>('prepare_vnpay_jwt_listener', { action: 'cli-vnpay' });
       const authUrl = `https://genai.vnpay.vn/create-jwt-token?connectid=${encodeURIComponent(String(port))}`;
       const { openUrl } = await import('@tauri-apps/plugin-opener');
       await openUrl(authUrl);
@@ -243,7 +243,7 @@ function Accounts() {
         pendingSsoAction.current = null;
         return;
       }
-      const port = await invoke<number>('prepare_vnpay_jwt_listener');
+      const port = await invoke<number>('prepare_vnpay_jwt_listener', { action: 'antigravity' });
       const authUrl = `https://genai.vnpay.vn/create-jwt-token?anti=on&connectid=${encodeURIComponent(String(port))}`;
       const { openUrl } = await import('@tauri-apps/plugin-opener');
       await openUrl(authUrl);
@@ -293,9 +293,19 @@ function Accounts() {
     setMitmBusy(true);
     try {
       await invoke('nine_router_mitm_stop', { removeDns: true, sudoPassword: password });
-      setMitmRunning(false);
-      setSudoPasswordDialog({ open: false, action: 'stop', isLoading: false });
-      showToast('Antigravity đã tắt - DNS đã khôi phục', 'success');
+
+      // Check if hosts entries were actually removed
+      const hostsActive = await invoke<boolean>('nine_router_mitm_hosts_active');
+      if (hostsActive) {
+        // Cleanup failed, hosts entries still present
+        setSudoPasswordDialog({ open: false, action: 'stop', isLoading: false });
+        showToast('Antigravity lỗi: Không xoá được cấu hình hosts. Kiểm tra mật khẩu sudo.', 'error');
+      } else {
+        // Cleanup successful
+        setMitmRunning(false);
+        setSudoPasswordDialog({ open: false, action: 'stop', isLoading: false });
+        showToast('Antigravity đã tắt - DNS đã khôi phục', 'success');
+      }
     } catch (error) {
       console.error('Antigravity stop failed:', error);
       setSudoPasswordDialog({ open: false, action: 'stop', isLoading: false });
@@ -447,9 +457,10 @@ function Accounts() {
         fetchCurrentAccount();
       });
 
-      const unlistenCliJwt = await listen('vnpay-cli-jwt-installed', () => {
+      const unlistenCliJwt = await listen<{ action: string }>('vnpay-cli-jwt-installed', (event) => {
         clearTimeout(ssoTimeoutId); // Cancel timeout on success
-        const action = pendingSsoAction.current;
+        // Read action from Rust event payload (set by Rust backend based on action parameter)
+        const action = event.payload?.action || pendingSsoAction.current || 'unknown';
         pendingSsoAction.current = null; // reset ngay sau khi đọc
 
         console.log('[Accounts] vnpay-cli-jwt-installed, triggered by:', action);
@@ -470,12 +481,11 @@ function Accounts() {
 
           // Now show password dialog to start MITM/DNS
           setAntigravityBusy(false);
-          pendingSsoAction.current = null;
           setSudoPasswordDialog({ open: true, action: 'start', isLoading: false });
 
         } else {
           // Fallback nếu không rõ nguồn
-          console.warn('[Accounts] vnpay-cli-jwt-installed fired with unknown action');
+          console.warn('[Accounts] vnpay-cli-jwt-installed fired with unknown action:', action);
           setCliVnpayBusy(false);
           setAntigravityBusy(false);
         }
