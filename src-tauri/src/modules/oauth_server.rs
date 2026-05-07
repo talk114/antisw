@@ -1249,9 +1249,6 @@ pub async fn prepare_vnpay_jwt_listener(
             // CLI VNPAY mode: Write JWT to settings.json
             match crate::modules::claude_settings::apply_vnpay_jwt(&token) {
                 Ok(()) => {
-                    // Best-effort OTel telemetry profile setup
-                    let otel_added =
-                        crate::modules::claude_settings::ensure_otel_telemetry().unwrap_or(false);
 
                     let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
                         <html><head><meta charset='utf-8'></head>\

@@ -511,13 +511,6 @@ pub async fn remove_claude_vnpay_settings() -> Result<(), String> {
     modules::claude_settings::remove_vnpay_config()
 }
 
-/// Ensure OTel telemetry env vars are exported in user shell profile.
-/// Returns true when at least one variable was newly added.
-#[tauri::command]
-pub async fn ensure_otel_telemetry_env() -> Result<bool, String> {
-    modules::claude_settings::ensure_otel_telemetry()
-}
-
 // --- 导入命令 ---
 
 #[tauri::command]

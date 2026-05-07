@@ -572,7 +572,6 @@ pub fn run() {
             commands::cancel_vnpay_jwt_listener,
             commands::check_claude_vnpay_installed,
             commands::remove_claude_vnpay_settings,
-            commands::ensure_otel_telemetry_env,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

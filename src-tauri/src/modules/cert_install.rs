@@ -113,13 +113,15 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| cert_path.to_string_lossy().to_string());
 
+    // Strip \\?\ prefix added by canonicalize() on Windows - causes issues with PowerShell Import-Certificate
+    let cert_abs_path = cert_abs_path.strip_prefix("\\\\?\\").unwrap_or(&cert_abs_path);
+
     tracing::debug!("[CERT] Installing certificate from: {}", cert_abs_path);
 
     // First try LocalMachine\Root (requires admin privileges)
-    // Use double quotes for path and -LiteralPath to avoid PowerShell interpretation
     let ps_command = format!(
-        r#"Import-Certificate -LiteralPath "{}" -CertStoreLocation Cert:\LocalMachine\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
-        cert_abs_path.replace('\\', "\\")
+        r#"Import-Certificate -FilePath "{}" -CertStoreLocation Cert:\LocalMachine\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
+        cert_abs_path
     );
 
     let output = Command::new("powershell")
@@ -145,8 +147,8 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
 
     // Fall back to CurrentUser\Root (no admin required, user-level trust)
     let ps_command = format!(
-        r#"Import-Certificate -LiteralPath "{}" -CertStoreLocation Cert:\CurrentUser\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
-        cert_abs_path.replace('\\', "\\")
+        r#"Import-Certificate -FilePath "{}" -CertStoreLocation Cert:\CurrentUser\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
+        cert_abs_path
     );
 
     let output = Command::new("powershell")

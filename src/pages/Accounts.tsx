@@ -414,16 +414,15 @@ function Accounts() {
   useEffect(() => {
     if (!isTauri()) return;
 
-    // Bootstrap CLI VNPAY status & best-effort OTel profile setup
     refreshCliVnpayStatus();
     refreshMitmStatus();
-    invoke<boolean>('ensure_otel_telemetry_env')
-      .then((added) => {
-        if (added) {
-          showToast('Đã thêm OTel telemetry vào shell profile', 'info');
-        }
-      })
-      .catch((e) => console.warn('ensure_otel_telemetry_env failed', e));
+    // invoke<boolean>('ensure_otel_telemetry_env')
+    //   .then((added) => {
+    //     if (added) {
+    //       showToast('Đã thêm OTel telemetry vào shell profile', 'info');
+    //     }
+    //   })
+    //   .catch((e) => console.warn('ensure_otel_telemetry_env failed', e));
 
     // Timeout to reset busy state if SSO fails (user closes browser without completing auth)
     const ssoTimeoutId = setTimeout(() => {
