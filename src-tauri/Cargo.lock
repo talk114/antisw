@@ -96,7 +96,7 @@ checksum = "34fde25430d87a9388dadbe6e34d7f72a462c8b43ac8d309b42b0a8505d7e2a5"
 
 [[package]]
 name = "antigravity_sw"
-version = "5.0.2"
+version = "5.0.3"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "brotli-decompressor"
-version = "5.0.2"
+version = "5.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
 dependencies = [
