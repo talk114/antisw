@@ -107,25 +107,35 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
         return Err(format!("Certificate not found: {}", cert_path.display()));
     }
 
-    let cert_str = cert_path.to_string_lossy().to_string();
+    // Get absolute path to ensure correct path resolution
+    let cert_abs_path = cert_path
+        .canonicalize()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| cert_path.to_string_lossy().to_string());
+
+    tracing::debug!("[CERT] Installing certificate from: {}", cert_abs_path);
 
     // First try LocalMachine\Root (requires admin privileges)
+    // Use double quotes for path and -LiteralPath to avoid PowerShell interpretation
     let ps_command = format!(
-        "Import-Certificate -FilePath '{}' -CertStoreLocation Cert:\\LocalMachine\\Root -Confirm:$false",
-        cert_str.replace('\'', "''")
+        r#"Import-Certificate -LiteralPath "{}" -CertStoreLocation Cert:\LocalMachine\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
+        cert_abs_path.replace('\\', "\\")
     );
 
     let output = Command::new("powershell")
-        .args(&["-NoProfile", "-Command", &ps_command])
+        .args(&["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_command])
         .output();
 
     match output {
-        Ok(out) if out.status.success() => {
-            tracing::info!("[CERT] Certificate installed to Windows LocalMachine\\Root (admin)");
-            return Ok(());
-        }
         Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
             let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::debug!("[CERT] LocalMachine stdout: {}, stderr: {}", stdout, stderr);
+
+            if out.status.success() && !stderr.to_lowercase().contains("exception") {
+                tracing::info!("[CERT] Certificate installed to Windows LocalMachine\\Root (admin)");
+                return Ok(());
+            }
             tracing::warn!("[CERT] LocalMachine\\Root install failed (admin required): {}", stderr);
         }
         Err(e) => {
@@ -135,18 +145,22 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
 
     // Fall back to CurrentUser\Root (no admin required, user-level trust)
     let ps_command = format!(
-        "Import-Certificate -FilePath '{}' -CertStoreLocation Cert:\\CurrentUser\\Root -Confirm:$false",
-        cert_str.replace('\'', "''")
+        r#"Import-Certificate -LiteralPath "{}" -CertStoreLocation Cert:\CurrentUser\Root -Confirm:$false 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0 -and $Error.Count -gt 0) {{ throw $Error[0] }}"#,
+        cert_abs_path.replace('\\', "\\")
     );
 
     let output = Command::new("powershell")
-        .args(&["-NoProfile", "-Command", &ps_command])
+        .args(&["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_command])
         .output();
 
     match output {
         Ok(out) if out.status.success() => {
-            tracing::info!("[CERT] Certificate installed to Windows CurrentUser\\Root (user-level)");
-            Ok(())
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if !stderr.to_lowercase().contains("exception") {
+                tracing::info!("[CERT] Certificate installed to Windows CurrentUser\\Root (user-level)");
+                return Ok(());
+            }
+            Err(format!("Failed to install certificate: {}", stderr))
         }
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);

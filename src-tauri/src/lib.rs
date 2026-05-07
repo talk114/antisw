@@ -351,49 +351,16 @@ pub fn run() {
                 info!("Tray disabled for this session");
             }
 
-            // 立即启动管理服务器 (8045)，以便 Web 端能访问
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                // Load config
-                if let Ok(config) = modules::config::load_app_config() {
-                    let state = handle.state::<commands::proxy::ProxyServiceState>();
-                    let cf_state = handle.state::<commands::cloudflared::CloudflaredState>();
-                    let integration = crate::modules::integration::SystemManager::Desktop(handle.clone());
-
-                    // 1. 确保管理后台开启
-                    if let Err(e) = commands::proxy::ensure_admin_server(
-                        config.proxy.clone(),
-                        &state,
-                        integration.clone(),
-                        Arc::new(cf_state.inner().clone()),
-                    ).await {
-                        error!("Failed to start admin server: {}", e);
-                    } else {
-                        info!("Admin server (port {}) started successfully", config.proxy.port);
-                    }
-
-                    // 2. 自动启动转发逻辑
-                    if config.proxy.auto_start {
-                        if let Err(e) = commands::proxy::internal_start_proxy_service(
-                            config.proxy,
-                            &state,
-                            integration,
-                            Arc::new(cf_state.inner().clone()),
-                        ).await {
-                            error!("Failed to auto-start proxy service: {}", e);
-                        } else {
-                            info!("Proxy service auto-started successfully");
-                        }
-                    }
-                }
-            });
+            // [REMOVED] Proxy server (port 8045) no longer auto-started
+            // Port 8045 is disabled - users can manually enable if needed
+            info!("Proxy auto-start disabled (port 8045 not opened by default)");
 
             // Start smart scheduler
             let scheduler_state = app.handle().state::<commands::proxy::ProxyServiceState>();
             modules::scheduler::start_scheduler(Some(app.handle().clone()), scheduler_state.inner().clone());
 
-            // [PHASE 1] 已整合至 Axum 端口 (8045)，不再单独启动 19527 端口
-            info!("Management API integrated into main proxy server (port 8045)");
+            // [REMOVED] Port 8045 integration
+            info!("Proxy server disabled by default");
 
             Ok(())
         })

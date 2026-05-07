@@ -430,15 +430,13 @@ function Accounts() {
       const action = pendingSsoAction.current;
       if (action) {
         console.log('[Accounts] SSO timeout - resetting busy state for:', action);
-        showToast('Xác thực VNPAY thất bại hoặc hết thời gian chờ', 'warning');
-        pendingSsoAction.current = null;
         if (action === 'cli-vnpay') {
           setCliVnpayBusy(false);
         } else if (action === 'antigravity') {
           setAntigravityBusy(false);
         }
       }
-    }, 180000); // 3 minutes timeout
+    }, 10000); // 3 minutes timeout
 
     const setupListeners = async () => {
       const { listen } = await import('@tauri-apps/api/event');

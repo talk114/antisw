@@ -69,10 +69,16 @@ pub async fn nine_router_mitm_start(
 
     // Install certificate if requested (default: true)
     if installCert.unwrap_or(true) {
-        match crate::modules::cert_install::install_cert(sudoPassword.as_deref()) {
-            Ok(_) => tracing::info!("[9NICE] SSL certificate installed to system trust store"),
-            Err(e) => tracing::warn!("[9NICE] Failed to install SSL certificate: {}. SSL errors may occur.", e),
+        if let Err(e) = crate::modules::cert_install::install_cert(sudoPassword.as_deref()) {
+            tracing::warn!("[9NICE] Failed to install SSL certificate: {}", e);
+            // Return error so frontend can show toast notification
+            return Err(format!(
+                "Failed to install SSL certificate (googleapis.crt): {}.\n\n\
+                Please try running as administrator or manually install the certificate.",
+                e
+            ));
         }
+        tracing::info!("[9NICE] SSL certificate installed to system trust store");
     }
 
     // Set DNS redirect entries if requested (default: true)
