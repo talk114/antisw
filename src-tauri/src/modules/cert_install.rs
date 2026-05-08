@@ -4,20 +4,45 @@
 use std::path::Path;
 use std::process::Command;
 
-/// Path to the bundled certificate file
-pub fn get_cert_path() -> Option<std::path::PathBuf> {
+/// Path to the bundled certificate file.
+///
+/// Dev:  CARGO_MANIFEST_DIR/assets/googleapis.crt  (e.g. src-tauri/assets/)
+/// Prod: <exe>/Contents/Resources/assets/          (macOS bundle)
+///       <exe>/../resources/                       (Windows/Linux bundle)
+pub fn get_cert_path(app_handle: Option<&tauri::AppHandle>) -> Option<std::path::PathBuf> {
     // Dev build: CARGO_MANIFEST_DIR is src-tauri/, assets/ is sibling
     let dev_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/googleapis.crt");
     if dev_path.exists() {
         return Some(dev_path);
     }
 
-    // Production bundle: <exe>/../assets/googleapis.crt
+    // Production: try Tauri resource_dir first (correct on all platforms)
+    if let Some(handle) = app_handle {
+        use tauri::Manager;
+        if let Ok(resource_dir) = handle.path().resource_dir() {
+            let tauri_path = resource_dir.join("assets/googleapis.crt");
+            if tauri_path.exists() {
+                tracing::info!("[CERT] Found cert via Tauri resource_dir: {}", tauri_path.display());
+                return Some(tauri_path);
+            }
+        }
+    }
+
+    // Fallback: manual bundle layout for standalone builds
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let prod_path = parent.join("assets/googleapis.crt");
-            if prod_path.exists() {
-                return Some(prod_path);
+        let prod_path = if cfg!(target_os = "macos") {
+            // macOS app bundle: <exe> = Electron.app/Contents/MacOS/Electron
+            exe.parent()
+                .and_then(|p| p.parent()) // Contents/
+                .map(|p| p.join("Resources/assets/googleapis.crt"))
+        } else {
+            // Windows/Linux bundle: resources alongside executable
+            exe.parent().map(|p| p.join("resources/googleapis.crt"))
+        };
+
+        if let Some(p) = prod_path {
+            if p.exists() {
+                return Some(p);
             }
         }
     }
@@ -174,9 +199,9 @@ pub fn install_cert_to_store(cert_path: &Path, _password: Option<&str>) -> Resul
 
 /// Install certificate to OS trust store
 /// Returns Ok(()) if already trusted or successfully installed
-pub fn install_cert(password: Option<&str>) -> Result<(), String> {
-    let cert_path = get_cert_path()
-        .ok_or("Certificate file not found in assets/ (dev) or bundled alongside executable (prod)")?;
+pub fn install_cert(password: Option<&str>, app_handle: Option<&tauri::AppHandle>) -> Result<(), String> {
+    let cert_path = get_cert_path(app_handle)
+        .ok_or("Certificate file not found in assets/ (dev) or bundled alongside executable (prod). Please rebuild the app.")?;
 
     #[cfg(target_os = "macos")]
     {
@@ -248,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_get_cert_path() {
-        let path = get_cert_path();
+        let path = get_cert_path(None);
         if let Some(p) = path {
             // In dev, should point to assets/
             assert!(p.to_string_lossy().contains("googleapis.crt"));

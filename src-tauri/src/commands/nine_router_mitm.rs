@@ -54,6 +54,7 @@ pub fn nine_router_mitm_cert_installed() -> bool {
 #[tauri::command]
 pub async fn nine_router_mitm_start(
     state: State<'_, NineRouterMitmState>,
+    app_handle: tauri::AppHandle,
     target_ip: Option<String>,
     enableDns: Option<bool>,
     installCert: Option<bool>,
@@ -69,7 +70,7 @@ pub async fn nine_router_mitm_start(
 
     // Install certificate if requested (default: true)
     if installCert.unwrap_or(true) {
-        if let Err(e) = crate::modules::cert_install::install_cert(sudoPassword.as_deref()) {
+        if let Err(e) = crate::modules::cert_install::install_cert(sudoPassword.as_deref(), Some(&app_handle)) {
             tracing::warn!("[9NICE] Failed to install SSL certificate: {}", e);
             // Return error so frontend can show toast notification
             return Err(format!(

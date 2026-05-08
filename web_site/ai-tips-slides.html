@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tips — Training nội bộ VNPAY</title>
+  <style>
+    :root {
+      --navy: #080c18;
+      --navy2: #0d1225;
+      --navy3: #111829;
+      --navy4: #161e35;
+      --border: rgba(255, 255, 255, .08);
+      --blue: #2563eb;
+      --blue2: #3b7cf8;
+      --blue3: #60a5fa;
+      --text: #ffffff;
+      --muted: #8899b8;
+      --muted2: #b0bdd4;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --violet: #8b5cf6;
+      --radius: 16px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--navy);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      overflow: hidden;
+    }
+
+    /* ─── DECK ─────────────────────────── */
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 64px 96px 80px;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      animation: fadeIn .35s ease-out;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Background glow */
+    .slide::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(800px 500px at 12% 0%, rgba(37, 99, 235, .14), transparent 60%),
+        radial-gradient(700px 500px at 95% 100%, rgba(139, 92, 246, .10), transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .slide>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── TYPOGRAPHY ───────────────────── */
+    .label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--blue3);
+      margin-bottom: 18px;
+    }
+
+    .label .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue3);
+      box-shadow: 0 0 12px var(--blue3);
+    }
+
+    h1 {
+      font-size: clamp(40px, 5.5vw, 72px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -.02em;
+      margin-bottom: 24px;
+    }
+
+    h1 .blue {
+      color: var(--blue3);
+    }
+
+    h2 {
+      font-size: clamp(28px, 3.6vw, 44px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -.015em;
+      margin-bottom: 20px;
+    }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .lede {
+      color: var(--muted2);
+      font-size: clamp(16px, 1.25vw, 19px);
+      max-width: 760px;
+      line-height: 1.65;
+    }
+
+    p {
+      color: var(--muted2);
+    }
+
+    code,
+    .kbd {
+      font-family: "Fira Code", ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 13px;
+      padding: 2px 6px;
+      background: rgba(255, 255, 255, .07);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: #cfe1ff;
+    }
+
+    /* ─── COMPONENTS ──────────────────── */
+    .grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .grid-4 {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .card {
+      background: var(--navy2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      transition: border-color .2s, transform .15s;
+    }
+
+    .card:hover {
+      border-color: rgba(96, 165, 250, .35);
+      transform: translateY(-2px);
+    }
+
+    .card .ico {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    .ico-blue {
+      background: rgba(37, 99, 235, .15);
+      color: var(--blue3);
+    }
+
+    .ico-green {
+      background: rgba(34, 197, 94, .15);
+      color: #4ade80;
+    }
+
+    .ico-violet {
+      background: rgba(139, 92, 246, .18);
+      color: #c4b5fd;
+    }
+
+    .ico-rose {
+      background: rgba(244, 63, 94, .15);
+      color: #fda4af;
+    }
+
+    .ico-amber {
+      background: rgba(245, 158, 11, .15);
+      color: #fcd34d;
+    }
+
+    .card p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--muted2);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 50px;
+      letter-spacing: .04em;
+    }
+
+    .pill-blue {
+      background: rgba(37, 99, 235, .18);
+      color: #93c5fd;
+    }
+
+    .pill-green {
+      background: rgba(34, 197, 94, .15);
+      color: #4ade80;
+    }
+
+    .pill-rose {
+      background: rgba(244, 63, 94, .15);
+      color: #fda4af;
+    }
+
+    .pill-violet {
+      background: rgba(139, 92, 246, .18);
+      color: #c4b5fd;
+    }
+
+    /* Toolbar mock — gắn cho slide demo Accounts */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 14px;
+      background: var(--navy3);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-top: 28px;
+    }
+
+    .btn-mock {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      border: none;
+    }
+
+    .btn-violet {
+      background: #7c3aed;
+    }
+
+    .btn-emerald {
+      background: #059669;
+    }
+
+    .btn-rose {
+      background: #e11d48;
+    }
+
+    .btn-orange {
+      background: #ea580c;
+    }
+
+    .btn-blue {
+      background: #2563eb;
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--border);
+      color: var(--muted2);
+    }
+
+    /* Step list */
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 16px 18px;
+      background: var(--navy2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #fff;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .step .step-body {
+      align-self: center;
+    }
+
+    .step h3 {
+      margin-bottom: 4px;
+    }
+
+    .step p {
+      font-size: 14px;
+    }
+
+    /* Tip blocks — Do/Don't */
+    .do-dont {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .do,
+    .dont {
+      padding: 22px 24px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--navy2);
+    }
+
+    .do {
+      border-color: rgba(34, 197, 94, .25);
+    }
+
+    .dont {
+      border-color: rgba(244, 63, 94, .25);
+    }
+
+    .do h3 {
+      color: #4ade80;
+    }
+
+    .dont h3 {
+      color: #fda4af;
+    }
+
+    .do ul,
+    .dont ul {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 12px;
+    }
+
+    .do li,
+    .dont li {
+      position: relative;
+      padding-left: 24px;
+      font-size: 14px;
+      color: var(--muted2);
+      margin-bottom: 8px;
+      line-height: 1.55;
+    }
+
+    .do li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #4ade80;
+      font-weight: 800;
+    }
+
+    .dont li::before {
+      content: "✕";
+      position: absolute;
+      left: 0;
+      color: #fda4af;
+      font-weight: 800;
+    }
+
+    /* Callout */
+    .callout {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 18px 22px;
+      border-radius: 14px;
+      background: rgba(37, 99, 235, .08);
+      border: 1px solid rgba(37, 99, 235, .25);
+      margin-top: 28px;
+    }
+
+    .callout .ci {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .callout p {
+      color: var(--muted2);
+      font-size: 14px;
+    }
+
+    .callout strong {
+      color: #fff;
+    }
+
+    /* TOC list */
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 32px;
+      max-width: 900px;
+    }
+
+    .toc-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      background: var(--navy2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background .15s, transform .15s;
+    }
+
+    .toc-row:hover {
+      background: var(--navy3);
+      transform: translateX(2px);
+    }
+
+    .toc-num {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--blue3);
+      min-width: 32px;
+    }
+
+    .toc-text {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Cover slide */
+    .cover {
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    .cover .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 50px;
+      padding: 6px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      color: var(--muted2);
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    .cover .badge .blink {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: .5;
+      }
+    }
+
+    .cover-meta {
+      margin-top: 40px;
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .cover-meta div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cover-meta span {
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    /* ─── NAV / CONTROLS ─────────────── */
+    .nav {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(13, 18, 37, .85);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 50px;
+      z-index: 50;
+    }
+
+    .nav button {
+      background: transparent;
+      border: none;
+      color: var(--muted2);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background .15s;
+    }
+
+    .nav button:hover {
+      background: rgba(255, 255, 255, .08);
+      color: #fff;
+    }
+
+    .nav .counter {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted2);
+      min-width: 56px;
+      text-align: center;
+      letter-spacing: .04em;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--violet));
+      transition: width .3s ease;
+      z-index: 60;
+    }
+
+    .footer-brand {
+      position: fixed;
+      bottom: 22px;
+      left: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      z-index: 40;
+    }
+
+    .footer-brand .logo {
+      font-size: 16px;
+    }
+
+    .slide-num {
+      position: fixed;
+      bottom: 22px;
+      right: 36px;
+      font-size: 12px;
+      color: var(--muted);
+      z-index: 40;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Compact sizing for content-heavy slides */
+    .compact h2 {
+      font-size: clamp(24px, 2.8vw, 34px);
+      margin-bottom: 14px;
+    }
+
+    .compact .grid {
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .compact .card {
+      padding: 18px 20px;
+    }
+
+    .compact .lede {
+      font-size: 15px;
+    }
+
+    @media (max-width: 980px) {
+
+      .grid-3,
+      .grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .toc {
+        grid-template-columns: 1fr;
+      }
+
+      .do-dont {
+        grid-template-columns: 1fr;
+      }
+
+      .slide {
+        padding: 48px 32px 80px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="progress" id="progress"></div>
+  <div class="footer-brand"><span class="logo">🚀</span> Anti Gravity Switcher · AI Tips Training</div>
+  <div class="slide-num" id="slideNum">01</div>
+
+  <div class="deck" id="deck">
+
+    <!-- ════════════ 1 · COVER ════════════ -->
+    <section class="slide cover active">
+      <div class="badge">
+        <span class="blink"></span>
+        VAS_5.0.0 · Internal Training
+      </div>
+      <h1>
+        <span class="blue">AI Tips</span><br>
+        Dùng AI hợp lý,<br>
+        làm việc thông minh hơn.
+      </h1>
+      <p class="lede">
+        Hướng dẫn nhân viên VNPAY khai thác trọn bộ Anti Gravity Switcher — kết nối Claude Code, Antigravity IDE và
+        VNPAY
+        SSO để dùng Opus 4.6 / Sonnet 4.6 chuẩn doanh nghiệp, kèm các kỹ thuật prompt &amp; quản lý quota thực chiến.
+      </p>
+      <div class="cover-meta">
+        <div>Trình bày <span>VNPAY GenAI Team</span></div>
+        <div>Đối tượng <span>Nhân viên kỹ thuật &amp; nghiệp vụ</span></div>
+        <div>Thời lượng <span>~30 phút + Q&amp;A</span></div>
+      </div>
+    </section>
+
+    <!-- ════════════ 2 · AGENDA ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Nội dung buổi training</div>
+      <h2>Chúng ta sẽ đi qua 6 phần</h2>
+      <p class="lede">Tập trung vào những gì xuất hiện thực tế trên trang <strong>Tài khoản</strong> — bỏ qua các tính
+        năng nội bộ
+        không liên quan.</p>
+      <div class="toc">
+        <div class="toc-row" onclick="goTo(2)"><span class="toc-num">01</span><span class="toc-text">AI Tips là gì &amp;
+            tại
+            sao dùng?</span></div>
+        <div class="toc-row" onclick="goTo(4)"><span class="toc-num">02</span><span class="toc-text">Tour trang Tài
+            khoản</span></div>
+        <div class="toc-row" onclick="goTo(5)"><span class="toc-num">03</span><span class="toc-text">4 nút action
+            chính</span>
+        </div>
+        <div class="toc-row" onclick="goTo(10)"><span class="toc-num">04</span><span class="toc-text">Quản lý &amp;
+            refresh
+            tài khoản</span></div>
+        <div class="toc-row" onclick="goTo(13)"><span class="toc-num">05</span><span class="toc-text">Kỹ thuật dùng AI
+            hiệu
+            quả</span></div>
+        <div class="toc-row" onclick="goTo(17)"><span class="toc-num">06</span><span class="toc-text">Best practice
+            &amp;
+            Q&amp;A</span></div>
+      </div>
+    </section>
+
+    <!-- ════════════ 3 · WHAT IS IT ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 01 · Khái niệm</div>
+      <h2>Anti Gravity Switcher là gì?</h2>
+      <p class="lede">Một desktop app gateway chạy <strong>cục bộ trên máy bạn</strong>. Nó kết nối các tài khoản AI
+        doanh
+        nghiệp với Claude Code CLI và Antigravity IDE — bạn không cần tự cấu hình token, không cần proxy ngoài.</p>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="ico ico-blue">🔐</span>
+          <h3>VNPAY SSO</h3>
+          <p>Đăng nhập một lần qua <code>genai.vnpay.vn</code>. JWT được gắn vào <code>~/.claude/settings.json</code> tự
+            động.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">⚡</span>
+          <h3>Opus / Sonnet 4.6</h3>
+          <p>Truy cập model cao cấp qua hạ tầng VNPAY thay vì gói cá nhân — không lo hết quota giữa giờ.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-violet">🖥️</span>
+          <h3>Cục bộ &amp; an toàn</h3>
+          <p>Mọi cấu hình nằm trên máy bạn. Không gửi prompt qua bên thứ ba ngoài VNPAY GenAI gateway.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">💡</span>
+        <p><strong>Tóm gọn:</strong> Mở app → đăng nhập VNPAY SSO 1 lần → Claude Code CLI / Antigravity IDE chạy ngon,
+          không
+          cần biết về token, JWT, hosts file.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 4 · ACCOUNTS PAGE TOUR ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 02 · Tour UI</div>
+      <h2>Trang Tài khoản — chỗ bạn dành 90% thời gian</h2>
+      <p class="lede">Toàn bộ thao tác hằng ngày gói trong một thanh công cụ duy nhất. Phía dưới là danh sách tài khoản
+        dạng
+        list hoặc grid.</p>
+
+      <div class="toolbar">
+        <button class="btn-mock btn-ghost">🔍 Tìm kiếm</button>
+        <button class="btn-mock btn-ghost">☰ List</button>
+        <button class="btn-mock btn-ghost">▦ Grid</button>
+        <span style="color:var(--muted);font-size:12px;margin:0 6px">|</span>
+        <span class="pill pill-blue">Tất cả 24</span>
+        <span class="pill pill-violet">PRO 8</span>
+        <span class="pill pill-green">ULTRA 4</span>
+        <span class="pill pill-rose">FREE 12</span>
+        <div style="flex:1"></div>
+        <button class="btn-mock btn-violet">🖥 CLI Claude</button>
+        <button class="btn-mock btn-emerald">⚙ CLI VNPAY</button>
+        <button class="btn-mock btn-emerald">⚡ On Antigravity</button>
+        <button class="btn-mock btn-orange">🔄 SYNC AG</button>
+        <button class="btn-mock btn-blue">↻ Refresh</button>
+      </div>
+
+      <div class="callout">
+        <span class="ci">🎯</span>
+        <p>Bốn nút màu nổi bật ở phải — <strong>CLI Claude / CLI VNPAY / On Antigravity / SYNC AG</strong> — là 4 tác vụ
+          duy nhất bạn cần thuộc lòng. Slide tiếp theo sẽ đi từng nút.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 5 · CLI CLAUDE ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 03 · 4 nút action · 1/4</div>
+      <h2><button class="btn-mock btn-violet" style="font-size:18px;padding:8px 14px">🖥 CLI Claude</button> &nbsp;Đăng
+        ký
+        slot Claude MAX</h2>
+      <p class="lede">Khi bấm, app gửi <code>machine_name + IP + HMAC-SHA256</code> lên
+        <code>genai.vnpay.vn/auth-cli</code>
+        để xác thực thiết bị của bạn vào pool Claude MAX. Bạn chỉ cần đăng nhập Google trên trình duyệt.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-body">
+            <h3>Bấm nút CLI Claude</h3>
+            <p>App tự lấy hostname + IP nội bộ, ký HMAC và mở browser sang trang xác thực VNPAY.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-body">
+            <h3>Đăng nhập Google trên browser</h3>
+            <p>Hoàn tất Google OAuth. VNPAY ghi nhận máy của bạn vào slot.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-body">
+            <h3>Quay lại app, dùng Claude Code CLI</h3>
+            <p>Gõ <code>claude</code> trong terminal — slot đã hoạt động, không cần token thủ công.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">⚠️</span>
+        <p>Lỗi <strong>400</strong> khi xác thực thường có nghĩa bạn chưa được thêm vào slot. Báo nhóm GenAI để cấp
+          quyền.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 6 · CLI VNPAY ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 03 · 4 nút action · 2/4</div>
+      <h2><button class="btn-mock btn-emerald" style="font-size:18px;padding:8px 14px">⚙ CLI VNPAY</button> &nbsp;Cài
+        JWT
+        VNPAY vào Claude Code</h2>
+      <p class="lede">Nút này ghi JWT của bạn vào <code>~/.claude/settings.json</code>. Sau đó Claude Code CLI sẽ đi qua
+        gateway VNPAY thay vì Anthropic gốc — dùng Opus / Sonnet 4.6 free trong nội bộ.</p>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="ico ico-green">▶</span>
+          <h3>Khi chưa cài (nút xanh)</h3>
+          <p>Bấm <strong>CLI VNPAY</strong> → SSO → JWT được ghi tự động. Toast báo "CLI VNPAY đã cấu hình vào
+            settings.json".</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-rose">⏏</span>
+          <h3>Khi đã cài (nút đỏ "GỠ CLI VNPAY")</h3>
+          <p>Bấm sẽ xoá JWT khỏi <code>settings.json</code>, trả Claude Code về cấu hình gốc.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">💡</span>
+        <p><strong>Khi nào dùng:</strong> Nếu bạn làm việc qua <strong>Claude Code CLI / Claude Desktop</strong>. Không
+          cần
+          dùng nếu chỉ làm việc trên IDE Antigravity (xem nút kế tiếp).</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 7 · ANTIGRAVITY ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 03 · 4 nút action · 3/4</div>
+      <h2><button class="btn-mock btn-emerald" style="font-size:18px;padding:8px 14px">⚡ On Antigravity</button>
+        &nbsp;Bật
+        chế độ VNPAY cho Antigravity IDE</h2>
+      <p class="lede">Antigravity IDE không hỗ trợ đổi endpoint trực tiếp, nên app dùng <strong>hosts redirect + MITM
+          nội
+          bộ</strong> để chuyển traffic qua VNPAY. Cần mật khẩu sudo để chỉnh hosts file.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-body">
+            <h3>Bấm <em>On Antigravity</em></h3>
+            <p>Nếu chưa SSO, app mở browser → bạn xác thực VNPAY → quay lại app.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-body">
+            <h3>Nhập mật khẩu sudo</h3>
+            <p>App ghi entries vào <code>/etc/hosts</code> và khởi động MITM proxy cục bộ. Toast báo PID khi thành công.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-body">
+            <h3>Mở Antigravity IDE bình thường</h3>
+            <p>Toàn bộ request từ IDE đi qua VNPAY mà bạn không phải đổi cấu hình IDE.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-body">
+            <h3>Tắt khi xong việc → <em>Undo AG</em></h3>
+            <p>Nút chuyển đỏ. Bấm và nhập sudo lần nữa để khôi phục hosts file gốc.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 8 · SYNC AG ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 03 · 4 nút action · 4/4</div>
+      <h2><button class="btn-mock btn-orange" style="font-size:18px;padding:8px 14px">🔄 SYNC AG</button> &nbsp;Đồng bộ
+        tài
+        khoản từ VNPAY</h2>
+      <p class="lede">Bấm để kéo danh sách tài khoản Gemini / Claude bạn đã được phân bổ trên VNPAY về app cục bộ —
+        không
+        cần copy refresh-token thủ công.</p>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="ico ico-amber">📥</span>
+          <h3>Khi nào bấm?</h3>
+          <p>Lần đầu mở app, hoặc sau khi admin VNPAY cấp thêm tài khoản cho bạn.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-blue">🔁</span>
+          <h3>Có gì xảy ra?</h3>
+          <p>App mở SSO → VNPAY trả về danh sách qua callback nội bộ → tài khoản hiển thị ngay trên list.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">⚠️</span>
+        <p>Nếu thấy thông báo <code>unknown or expired state</code> — chỉ đơn giản là phiên SSO hết hạn. Bấm lại nút
+          SYNC AG
+          để bắt đầu mới.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 9 · 4 BUTTONS RECAP ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 03 · Tóm tắt</div>
+      <h2>Khi nào bấm nút nào?</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="pill pill-violet">🖥 CLI Claude</span>
+          <h3 style="margin-top:10px">Một lần khi nhận máy mới</h3>
+          <p>Đăng ký thiết bị vào slot Claude MAX. Sau khi xong là quên đi — chỉ làm lại nếu đổi máy.</p>
+        </div>
+        <div class="card">
+          <span class="pill pill-green">⚙ CLI VNPAY</span>
+          <h3 style="margin-top:10px">Bạn dùng Claude Code CLI</h3>
+          <p>Bấm 1 lần để cài JWT. Bấm GỠ khi muốn quay về Claude gốc (hiếm khi cần).</p>
+        </div>
+        <div class="card">
+          <span class="pill pill-green">⚡ On Antigravity</span>
+          <h3 style="margin-top:10px">Bạn dùng Antigravity IDE</h3>
+          <p>Bật trước khi bắt đầu work session. <strong>Tắt khi xong</strong> để hosts file sạch.</p>
+        </div>
+        <div class="card">
+          <span class="pill pill-blue">🔄 SYNC AG</span>
+          <h3 style="margin-top:10px">Khi danh sách tài khoản trống / cũ</h3>
+          <p>Kéo về danh sách mới nhất từ VNPAY. An toàn để bấm bất cứ lúc nào.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 10 · ACCOUNT LIST ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 04 · Quản lý tài khoản</div>
+      <h2>Lọc, tìm kiếm và đổi view</h2>
+      <p class="lede">Danh sách tài khoản có 2 chế độ hiển thị và 4 bộ lọc tier. Tất cả đều lưu lại lựa chọn của bạn cho
+        lần
+        mở app sau.</p>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="ico ico-blue">☰</span>
+          <h3>List vs Grid</h3>
+          <p>List cho cái nhìn dày đặc, Grid trực quan hơn khi có ít tài khoản. Lựa chọn lưu trong
+            <code>localStorage</code>.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-violet">🏷️</span>
+          <h3>Lọc theo Tier</h3>
+          <p><strong>All / PRO / ULTRA / FREE</strong> — số đếm hiển thị ngay trên nút. Hữu ích khi pool có vài chục
+            account.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">🔍</span>
+          <h3>Tìm theo email</h3>
+          <p>Gõ một phần email — danh sách tự lọc. Trên màn hình nhỏ, ô tìm kiếm thu gọn thành icon.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">💡</span>
+        <p>Khi đang chọn nhiều tài khoản, bộ lọc và search vẫn hoạt động — phần checkbox của bạn được giữ nguyên cho
+          từng id.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 11 · BATCH OPS ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 04 · Thao tác hàng loạt</div>
+      <h2>Chọn nhiều tài khoản → 3 nút action xuất hiện</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="ico ico-rose">🗑</span>
+          <h3>Xoá hàng loạt</h3>
+          <p>Có dialog xác nhận. Tài khoản bị xoá khỏi store cục bộ — cần SYNC AG nếu muốn lấy lại.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-amber">⏸</span>
+          <h3>Tạm tắt proxy</h3>
+          <p>Đưa tài khoản ra khỏi rotation tạm thời (vd. khi nghi ngờ token lỗi). Có thể bật lại bằng nút xanh.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">▶</span>
+          <h3>Bật lại proxy</h3>
+          <p>Đưa hàng loạt tài khoản đã tắt trở về rotation. Toast báo số lượng đổi trạng thái.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">⚠️</span>
+        <p><strong>Quy tắc đội nhóm:</strong> Không xoá tài khoản dùng chung trừ khi đã xác nhận với admin GenAI. Khi
+          nghi
+          ngờ, dùng <em>tắt proxy</em> để cô lập thay vì xoá.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 12 · REFRESH / IMPORT ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 04 · Refresh &amp; Import</div>
+      <h2>Quota, hiển thị, import JSON</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="ico ico-blue">↻</span>
+          <h3>Refresh quota</h3>
+          <p>Không chọn ai → refresh <strong>tất cả</strong>. Có chọn → chỉ refresh những id đã chọn. Toast báo số
+            success
+            / failed.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-violet">👁</span>
+          <h3>Show all quotas</h3>
+          <p>Toggle để hiện hạn mức của tất cả model trên mỗi account, không chỉ model đang dùng. Hữu ích để chẩn đoán
+            nhanh.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-amber">⬆</span>
+          <h3>Import JSON</h3>
+          <p>Nhập batch tài khoản từ file JSON hợp lệ (refresh_token bắt đầu bằng <code>1//</code>). Báo cáo số lượng
+            partial / fail.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">🎯</span>
+        <p><strong>Best practice:</strong> Refresh quota mỗi sáng trước khi vào việc. Nếu nhiều account báo "Vô hiệu"
+          cùng
+          lúc — kiểm tra mạng / SSO trước khi nghĩ tới việc xoá.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 13 · MODEL CHOICE ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 05 · Kỹ thuật dùng AI · 1/4</div>
+      <h2>Chọn đúng model cho đúng việc</h2>
+      <p class="lede">Lãng phí Opus cho công việc nhỏ là một trong các nguyên nhân pool quota cạn nhanh nhất. Hướng dẫn
+        theo task:</p>
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="ico ico-violet">🧠</span>
+          <h3>Opus 4.6 / 4.7</h3>
+          <p><strong>Reasoning sâu</strong> — refactor đa file, debug bug khó, design system, viết spec phức tạp. Đắt
+            nhất,
+            dùng có chủ đích.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-blue">⚖</span>
+          <h3>Sonnet 4.6</h3>
+          <p><strong>Mặc định cho coding hằng ngày</strong> — đọc code, viết test, sửa bug vừa, giải thích. Cân bằng
+            tốc độ &amp; chất lượng.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">⚡</span>
+          <h3>Haiku / Flash</h3>
+          <p><strong>Tác vụ nhanh</strong> — tóm tắt, đặt tên biến, format text, tự động hoá nền. Đừng dùng cho task cần
+            tư duy.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">💡</span>
+        <p>Antigravity IDE và Claude Code đã có cơ chế <strong>"hạ cấp thầm lặng"</strong>: tác vụ nền (đặt tên hội
+          thoại,
+          autocomplete) tự rớt về Flash. Bạn chỉ cần lo task chính của mình.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 14 · PROMPT TIPS ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 05 · Kỹ thuật dùng AI · 2/4</div>
+      <h2>Viết prompt — 4 thói quen đáng tiền</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="ico ico-blue">🎯</span>
+          <h3>1. Nói rõ đầu ra</h3>
+          <p>"Trả về JSON với field X, Y, Z" tốt hơn "tóm tắt giúp tôi". Định dạng đầu ra rõ → ít round-trip → ít token.
+          </p>
+        </div>
+        <div class="card">
+          <span class="ico ico-violet">📎</span>
+          <h3>2. Cung cấp ngữ cảnh tối thiểu cần</h3>
+          <p>Dán đoạn code liên quan, không dán cả file 5000 dòng. Nhiều rác → AI tập trung sai chỗ.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">🪜</span>
+          <h3>3. Chia nhỏ task</h3>
+          <p>"Đọc → đề xuất → tôi xem → mới sửa". Đừng đưa "làm hết" cho prompt một dòng. Bạn mất kiểm soát, AI mất
+            context.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-amber">🧪</span>
+          <h3>4. Yêu cầu nó verify</h3>
+          <p>"Sau khi sửa, chạy test/lint và báo lại". Cho AI làm việc của tester — bắt nó tự bắt lỗi trước khi giao
+            bạn.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 15 · DO / DONT ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 05 · Kỹ thuật dùng AI · 3/4</div>
+      <h2>Nên / Không nên</h2>
+      <div class="do-dont">
+        <div class="do">
+          <h3>NÊN</h3>
+          <ul>
+            <li>Đọc lại diff AI gen ra <strong>trước khi commit</strong> — nó có thể "hợp lý mà sai".</li>
+            <li>Hỏi AI giải thích đoạn code lạ thay vì copy-paste mò.</li>
+            <li>Dùng AI để viết unit test cho code có sẵn — nhanh và an toàn.</li>
+            <li>Tận dụng <em>cache prompt</em> (gateway VNPAY hỗ trợ): giữ system prompt ổn định, biến phần thay đổi
+              ra cuối.</li>
+            <li>Báo nhóm GenAI khi gặp lỗi lặp lại — có thể là vấn đề pool, không phải bạn.</li>
+          </ul>
+        </div>
+        <div class="dont">
+          <h3>KHÔNG NÊN</h3>
+          <ul>
+            <li>Dán <strong>thông tin bí mật khách hàng</strong>, secret/API key, dữ liệu sản xuất vào prompt.</li>
+            <li>Tin AI 100% với câu trả lời về số liệu cụ thể, định danh, version — luôn check lại nguồn.</li>
+            <li>Mở 5 cửa sổ Antigravity cùng lúc để "chạy nhanh hơn" — chỉ cạn quota chung.</li>
+            <li>Spam refresh quota mỗi 5 giây — gateway có rate limit, sẽ phản tác dụng.</li>
+            <li>Xoá tài khoản dùng chung khi thấy lỗi 403/Vô hiệu — báo nhóm trước.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 16 · WORKFLOW PATTERNS ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 05 · Kỹ thuật dùng AI · 4/4</div>
+      <h2>Vài pattern thực chiến</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="ico ico-blue">🔍</span>
+          <h3>Pattern "Plan → Approve → Apply"</h3>
+          <p>Yêu cầu AI <em>chỉ nêu kế hoạch</em> trước, bạn duyệt, rồi mới cho phép sửa code. Tránh AI đi quá xa.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-violet">🧩</span>
+          <h3>Pattern "1 file 1 prompt"</h3>
+          <p>Khi refactor, cô lập 1 file mỗi lần. Diff nhỏ → review nhanh → ít regression.</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-green">🧪</span>
+          <h3>Pattern "Red → Green"</h3>
+          <p>Viết test fail trước, đưa AI sửa code cho đến khi xanh. Quy chuẩn rõ, AI khó "ăn gian".</p>
+        </div>
+        <div class="card">
+          <span class="ico ico-amber">📝</span>
+          <h3>Pattern "Save as recipe"</h3>
+          <p>Prompt nào dùng nhiều — lưu thành snippet (CLAUDE.md, AGENTS.md hoặc Notion team). Đừng gõ lại mỗi sáng.
+          </p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="ci">📚</span>
+        <p>Đầy đủ doc &amp; FAQ tại <code>https://gravityland.vnoffice.io.vn/support.html</code> — bookmark sẵn để dùng
+          khi
+          gặp lỗi.</p>
+      </div>
+    </section>
+
+    <!-- ════════════ 17 · TROUBLESHOOTING ════════════ -->
+    <section class="slide compact">
+      <div class="label"><span class="dot"></span>Phần 06 · Xử lý sự cố nhanh</div>
+      <h2>Lỗi thường gặp &amp; cách xử</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>🛑 Tài khoản báo 403</h3>
+          <p>Tài khoản Google cá nhân không có quyền Gemini Code Assist. App tự bỏ khỏi rotation. Báo admin GenAI nếu là
+            account công ty.</p>
+        </div>
+        <div class="card">
+          <h3>🔁 invalid_grant trong Claude Code</h3>
+          <p>Token Google OAuth hết hạn. Vào trang Tài khoản → tìm tài khoản "Vô hiệu" → xác thực lại. Bật <strong>Smart
+              Warmup</strong> ở Settings để tránh tái diễn.</p>
+        </div>
+        <div class="card">
+          <h3>❌ unknown or expired state</h3>
+          <p>Phiên SSO hết hạn giữa chừng. Bấm lại nút (CLI VNPAY / On Antigravity / SYNC AG) từ đầu là xong.</p>
+        </div>
+        <div class="card">
+          <h3>🔒 Antigravity vẫn vào endpoint cũ</h3>
+          <p>Kiểm tra nút có đang ở trạng thái <strong>đỏ "Undo AG"</strong> không. Nếu chưa — bấm "On Antigravity" và
+            nhập
+            sudo. Nếu sai pass, hosts file không được sửa.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 18 · TAKEAWAYS ════════════ -->
+    <section class="slide">
+      <div class="label"><span class="dot"></span>Phần 06 · Chốt</div>
+      <h2>5 điều mang về</h2>
+      <div class="grid grid-2" style="grid-template-columns: 1.1fr .9fr">
+        <div>
+          <div class="step" style="margin-bottom:10px">
+            <div class="step-body">
+              <h3>Thuộc 4 nút action</h3>
+              <p>CLI Claude · CLI VNPAY · On Antigravity · SYNC AG. Mọi việc khác là phụ.</p>
+            </div>
+          </div>
+          <div class="step" style="margin-bottom:10px">
+            <div class="step-body">
+              <h3>Chọn model theo task, đừng theo thói quen</h3>
+              <p>Sonnet là mặc định, Opus khi cần nghĩ sâu, Flash cho việc lặt vặt.</p>
+            </div>
+          </div>
+          <div class="step" style="margin-bottom:10px">
+            <div class="step-body">
+              <h3>Prompt rõ đầu ra, ngữ cảnh tối thiểu</h3>
+              <p>Plan → Approve → Apply. Diff nhỏ, dễ review.</p>
+            </div>
+          </div>
+          <div class="step" style="margin-bottom:10px">
+            <div class="step-body">
+              <h3>Đọc lại trước khi commit</h3>
+              <p>AI là junior dev rất nhanh — bạn vẫn là reviewer.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-body">
+              <h3>Tôn trọng pool dùng chung</h3>
+              <p>Tắt Antigravity khi xong, không xoá account, hỏi nhóm khi nghi ngờ.</p>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="align-self:center">
+          <span class="ico ico-blue">📬</span>
+          <h3>Liên hệ hỗ trợ</h3>
+          <p style="margin-top:8px">
+            <strong>Doc &amp; FAQ:</strong> gravityland.vnoffice.io.vn/support.html<br><br>
+            <strong>Báo lỗi nhanh:</strong> Nhóm Zalo/Slack <em>VNPAY GenAI</em><br><br>
+            <strong>Cấp quyền slot:</strong> Admin pool — kèm hostname máy bạn cho nhanh.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ 19 · Q&A ════════════ -->
+    <section class="slide cover">
+      <div class="badge"><span class="blink"></span>Cảm ơn các bạn</div>
+      <h1><span class="blue">Q&amp;A</span></h1>
+      <p class="lede" style="font-size:20px">Có câu hỏi nào về AI Tips, Anti Gravity Switcher, hay cách dùng Claude /
+        Antigravity hiệu
+        quả hơn — hỏi luôn lúc này.</p>
+      <div class="cover-meta">
+        <div>Tài liệu <span>gravityland.vnoffice.io.vn/support.html</span></div>
+        <div>Tải app <span>gravityland.vnoffice.io.vn</span></div>
+        <div>Phiên bản <span>VAS_5.0.6 (latest)</span></div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ─── NAV BAR ─── -->
+  <div class="nav">
+    <button onclick="prev()" title="Slide trước (←)">◀</button>
+    <span class="counter" id="counter">01 / 19</span>
+    <button onclick="next()" title="Slide sau (→)">▶</button>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const counter = document.getElementById('counter');
+    const slideNum = document.getElementById('slideNum');
+    const progress = document.getElementById('progress');
+    let idx = 0;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function render() {
+      slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+      counter.textContent = `${pad(idx + 1)} / ${pad(slides.length)}`;
+      slideNum.textContent = pad(idx + 1);
+      progress.style.width = `${((idx + 1) / slides.length) * 100}%`;
+      // Update URL hash for sharing
+      history.replaceState(null, '', `#${idx + 1}`);
+    }
+
+    function next() {
+      if (idx < slides.length - 1) { idx++; render(); }
+    }
+    function prev() {
+      if (idx > 0) { idx--; render(); }
+    }
+    function goTo(i) {
+      if (i >= 0 && i < slides.length) { idx = i; render(); }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); next(); }
+      else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); prev(); }
+      else if (e.key === 'Home') { idx = 0; render(); }
+      else if (e.key === 'End') { idx = slides.length - 1; render(); }
+      else if (/^\d$/.test(e.key)) {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= slides.length) { idx = n - 1; render(); }
+      }
+    });
+
+    // Touch swipe
+    let tx = 0;
+    document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; });
+    document.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - tx;
+      if (Math.abs(dx) > 60) (dx < 0 ? next() : prev());
+    });
+
+    // Init from hash
+    const hashIdx = parseInt(location.hash.slice(1), 10);
+    if (!isNaN(hashIdx) && hashIdx >= 1 && hashIdx <= slides.length) idx = hashIdx - 1;
+    render();
+  </script>
+</body>
+
+</html>
