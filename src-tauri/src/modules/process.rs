@@ -1087,8 +1087,6 @@ fn check_standard_locations() -> Option<std::path::PathBuf> {
                     .join("Antigravity IDE")
                     .join("Antigravity IDE.exe"),
             );
-        }
-    if let Some(local) = local_appdata {
             possible_paths.push(
                 std::path::PathBuf::from(&local)
                     .join("Programs")
@@ -1102,7 +1100,7 @@ fn check_standard_locations() -> Option<std::path::PathBuf> {
                 .join("Antigravity IDE")
                 .join("Antigravity IDE.exe"),
         );
-    possible_paths.push(
+        possible_paths.push(
             std::path::PathBuf::from(&program_files)
                 .join("Antigravity IDE")
                 .join("Antigravity.exe"),
