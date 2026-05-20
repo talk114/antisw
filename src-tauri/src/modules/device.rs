@@ -53,7 +53,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     {
         let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
         let path =
-            home.join("Library/Application Support/Antigravity/User/globalStorage/storage.json");
+            home.join("Library/Application Support/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
@@ -72,7 +72,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
-        let path = home.join(".config/Antigravity/User/globalStorage/storage.json");
+        let path = home.join(".config/Antigravity IDE/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }

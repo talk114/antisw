@@ -435,7 +435,7 @@ pub fn wrap_request(
         "requestId": format!("agent-{}", uuid::Uuid::new_v4()), // 修正为 agent- 前缀
         "request": inner_request,
         "model": config.final_model,
-        "userAgent": "antigravity",
+        "userAgent": "antigravity ide",
         "requestType": config.request_type
     });
 

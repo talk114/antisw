@@ -44,20 +44,20 @@ pub fn get_db_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "macos")]
     {
         let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join("Library/Application Support/Antigravity/User/globalStorage/state.vscdb"))
+        Ok(home.join("Library/Application Support/Antigravity IDE/User/globalStorage/state.vscdb"))
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "Failed to get APPDATA environment variable".to_string())?;
-        Ok(PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\state.vscdb"))
+        Ok(PathBuf::from(appdata).join("Antigravity IDE\\User\\globalStorage\\state.vscdb"))
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join(".config/Antigravity/User/globalStorage/state.vscdb"))
+        Ok(home.join(".config/Antigravity IDE/User/globalStorage/state.vscdb"))
     }
 }
 

@@ -2,9 +2,189 @@ use std::fs;
 use std::path::PathBuf;
 use serde_json::Value;
 use base64::{Engine as _, engine::general_purpose};
-use crate::models::{TokenData, Account};
+use crate::models::{TokenData, Account, AccountIndex, AccountSummary};
 use crate::modules::{account, db};
 use crate::utils::protobuf;
+
+/// Sync legacy data from `~/.antigravity_sw/accounts/*.json` (plaintext, used by
+/// older builds) into the new `~/.antisw/accounts/` layout that stores each
+/// account file encrypted. Idempotent: only copies accounts whose target file
+/// does not already exist in the new directory, so it is safe to call on every
+/// startup.
+pub fn sync_legacy_antigravity_sw_accounts() -> Result<usize, String> {
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let legacy_dir = home.join(".antigravity_sw");
+    let legacy_accounts_dir = legacy_dir.join("accounts");
+
+    if !legacy_accounts_dir.exists() {
+        return Ok(0);
+    }
+
+    let new_accounts_dir = account::get_accounts_dir()?;
+
+    crate::modules::logger::log_info(&format!(
+        "[Migration] Detected legacy data directory {:?}, syncing accounts to new encrypted layout",
+        legacy_accounts_dir
+    ));
+
+    let entries = match fs::read_dir(&legacy_accounts_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            return Err(format!("Failed to read legacy accounts dir: {}", e));
+        }
+    };
+
+    // Build a set of existing emails (case-insensitive) so we can skip legacy
+    // accounts whose email already exists under a different ID — otherwise the
+    // same user would be migrated again and appear twice in the new layout.
+    let existing_index = account::load_account_index().unwrap_or_else(|_| AccountIndex::new());
+    let mut existing_emails: std::collections::HashSet<String> = existing_index
+        .accounts
+        .iter()
+        .map(|s| s.email.to_lowercase())
+        .collect();
+
+    let mut migrated: Vec<Account> = Vec::new();
+    let mut skipped = 0usize;
+
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if !path.extension().map_or(false, |ext| ext == "json") {
+            continue;
+        }
+
+        let account_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(id) => id.to_string(),
+            None => continue,
+        };
+
+        let new_account_path = new_accounts_dir.join(format!("{}.json", account_id));
+        if new_account_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        let raw = match fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Migration] Failed to read legacy account file {:?}: {}",
+                    path, e
+                ));
+                continue;
+            }
+        };
+
+        // Older builds may have written plaintext JSON, but be defensive and
+        // also handle the case where the file is already in the new encrypted
+        // envelope (decrypt_file_content returns the raw input when no envelope
+        // is detected).
+        let content = crate::utils::crypto::decrypt_file_content(&raw);
+
+        let account: Account = match serde_json::from_str(&content) {
+            Ok(acc) => acc,
+            Err(e) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Migration] Failed to parse legacy account {:?}: {}",
+                    path, e
+                ));
+                continue;
+            }
+        };
+
+        let email_key = account.email.to_lowercase();
+        if existing_emails.contains(&email_key) {
+            crate::modules::logger::log_info(&format!(
+                "[Migration] Skipping legacy account {} ({}): email already present under a different ID",
+                account.email, account.id
+            ));
+            skipped += 1;
+            continue;
+        }
+
+        if let Err(e) = account::save_account(&account) {
+            crate::modules::logger::log_warn(&format!(
+                "[Migration] Failed to save migrated account {} ({}): {}",
+                account.email, account.id, e
+            ));
+            continue;
+        }
+
+        crate::modules::logger::log_info(&format!(
+            "[Migration] Migrated account: {} ({})",
+            account.email, account.id
+        ));
+        existing_emails.insert(email_key);
+        migrated.push(account);
+    }
+
+    if migrated.is_empty() {
+        crate::modules::logger::log_info(&format!(
+            "[Migration] No new legacy accounts to sync ({} already present)",
+            skipped
+        ));
+        return Ok(0);
+    }
+
+    // Merge migrated summaries into the new index (build a fresh index if the
+    // new directory had none previously).
+    let mut new_index = account::load_account_index().unwrap_or_else(|_| AccountIndex::new());
+
+    for acc in &migrated {
+        if new_index.accounts.iter().any(|s| s.id == acc.id) {
+            continue;
+        }
+        new_index.accounts.push(AccountSummary {
+            id: acc.id.clone(),
+            email: acc.email.clone(),
+            name: acc.name.clone(),
+            disabled: acc.disabled,
+            proxy_disabled: acc.proxy_disabled,
+            protected_models: acc.protected_models.clone(),
+            created_at: acc.created_at,
+            last_used: acc.last_used,
+        });
+    }
+
+    // Preserve current_account_id from the legacy index if the new one has none.
+    if new_index.current_account_id.is_none() {
+        let legacy_index_path = legacy_dir.join("accounts.json");
+        if legacy_index_path.exists() {
+            if let Ok(raw) = fs::read_to_string(&legacy_index_path) {
+                let content = crate::utils::crypto::decrypt_file_content(&raw);
+                if let Ok(legacy_index) = serde_json::from_str::<AccountIndex>(&content) {
+                    if let Some(id) = legacy_index.current_account_id {
+                        if new_index.accounts.iter().any(|a| a.id == id) {
+                            new_index.current_account_id = Some(id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if new_index.current_account_id.is_none() {
+        new_index.current_account_id = new_index.accounts.first().map(|s| s.id.clone());
+    }
+
+    if let Err(e) = account::save_account_index(&new_index) {
+        crate::modules::logger::log_warn(&format!(
+            "[Migration] Failed to save new account index after sync: {}",
+            e
+        ));
+    }
+
+    crate::modules::logger::log_info(&format!(
+        "[Migration] Legacy sync complete: {} migrated, {} already present",
+        migrated.len(),
+        skipped
+    ));
+
+    Ok(migrated.len())
+}
 
 /// Scan and import V1 data
 pub async fn import_from_v1() -> Result<Vec<Account>, String> {

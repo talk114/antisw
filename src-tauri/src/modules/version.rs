@@ -62,7 +62,7 @@ pub fn get_antigravity_version() -> Result<AntigravityVersion, String> {
 fn get_version_macos(exe_path: &PathBuf) -> Result<AntigravityVersion, String> {
     use plist::Value;
     
-    // exe_path 可能是 /Applications/Antigravity.app 或内部可执行文件
+    // exe_path 可能是 /Applications/Antigravity IDE.app 或内部可执行文件
     // 需要找到 .app 目录
     let path_str = exe_path.to_string_lossy();
     let app_path = if let Some(idx) = path_str.find(".app") {

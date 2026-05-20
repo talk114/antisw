@@ -28,14 +28,14 @@ pub fn get_antigravity_cache_paths() -> Vec<PathBuf> {
         if let Some(home) = dirs::home_dir() {
             // Primary cache location - HTTP storage (contains User-Agent cache)
             // This is the main cause of "version no longer supported" errors
-            paths.push(home.join("Library/HTTPStorages/com.google.antigravity"));
+            paths.push(home.join("Library/HTTPStorages/com.google.antigravity-ide"));
 
             // Application caches
-            paths.push(home.join("Library/Caches/com.google.antigravity"));
+            paths.push(home.join("Library/Caches/com.google.antigravity-ide"));
 
             // Alternative cache locations that may exist
-            paths.push(home.join(".antigravity"));
-            paths.push(home.join(".config/antigravity"));
+            paths.push(home.join(".antigravity-ide"));
+            paths.push(home.join(".config/antigravity-ide"));
         }
     }
 
@@ -44,14 +44,14 @@ pub fn get_antigravity_cache_paths() -> Vec<PathBuf> {
         // LocalAppData cache
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let local_path = PathBuf::from(&local_app_data);
-            paths.push(local_path.join("Google\\Antigravity"));
-            paths.push(local_path.join("Antigravity\\Cache"));
+            paths.push(local_path.join("Google\\Antigravity IDE"));
+            paths.push(local_path.join("Antigravity IDE\\Cache"));
         }
 
         // AppData cache
         if let Ok(app_data) = std::env::var("APPDATA") {
             let app_path = PathBuf::from(&app_data);
-            paths.push(app_path.join("Antigravity\\Cache"));
+            paths.push(app_path.join("Antigravity IDE\\Cache"));
         }
     }
 
@@ -59,18 +59,18 @@ pub fn get_antigravity_cache_paths() -> Vec<PathBuf> {
     {
         if let Some(home) = dirs::home_dir() {
             // XDG cache directory
-            paths.push(home.join(".cache/Antigravity"));
-            paths.push(home.join(".cache/google-antigravity"));
+            paths.push(home.join(".cache/Antigravity IDE"));
+            paths.push(home.join(".cache/google-antigravity-ide"));
 
             // Alternative locations
-            paths.push(home.join(".antigravity"));
+            paths.push(home.join(".antigravity-ide"));
         }
 
         // XDG_CACHE_HOME if set
         if let Ok(xdg_cache) = std::env::var("XDG_CACHE_HOME") {
             let cache_path = PathBuf::from(&xdg_cache);
-            paths.push(cache_path.join("Antigravity"));
-            paths.push(cache_path.join("google-antigravity"));
+            paths.push(cache_path.join("Antigravity IDE"));
+            paths.push(cache_path.join("google-antigravity-ide"));
         }
     }
 

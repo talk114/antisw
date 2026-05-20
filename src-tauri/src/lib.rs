@@ -136,6 +136,15 @@ pub fn run() {
         error!("Failed to initialize user token database: {}", e);
     }
 
+    // One-shot sync of legacy `~/.antigravity_sw/accounts/*.json` files (used by
+    // older builds, plaintext) into the new encrypted layout under `~/.antisw/`.
+    // Idempotent: skips accounts already present in the new directory.
+    match modules::migration::sync_legacy_antigravity_sw_accounts() {
+        Ok(0) => {}
+        Ok(n) => info!("Migrated {} legacy account(s) from ~/.antigravity_sw/", n),
+        Err(e) => warn!("Legacy account sync failed: {}", e),
+    }
+
     if is_headless {
         info!("Starting in HEADLESS mode...");
 
