@@ -842,7 +842,7 @@ pub fn start_antigravity() -> Result<(), String> {
             }
         } else {
             let mut cmd = Command::new("cmd");
-            cmd.args(["/C", "start", "antigravity_ide://"]);
+            cmd.args(["/C", "start", "antigravity-ide://"]);
             
             let result = cmd.spawn();
             if result.is_err() {
